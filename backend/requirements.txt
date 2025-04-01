@@ -1,0 +1,8 @@
+wheel
+fastapi
+uvicorn
+flwr
+web3
+ipfshttpclient
+torch
+pydantic_settings

@@ -1,0 +1,6 @@
+flwr
+web3
+ipfshttpclient
+torch
+fastapi
+uvicorn
