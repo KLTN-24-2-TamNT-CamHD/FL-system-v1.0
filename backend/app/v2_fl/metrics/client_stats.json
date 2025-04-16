@@ -1,0 +1,77 @@
+{
+  "0x5eEbB5E0c2e9E97C80005777475C6766C91FD8b6": {
+    "details": {
+      "contribution_count": 9,
+      "total_score": 140,
+      "is_authorized": true,
+      "last_contribution_timestamp": 1744723603,
+      "rewards_earned": 3857,
+      "rewards_claimed": false
+    },
+    "records": [
+      {
+        "round": 1,
+        "accuracy": 40.0,
+        "score": 40,
+        "timestamp": 1744647948,
+        "rewarded": false
+      },
+      {
+        "round": 2,
+        "accuracy": 35.0,
+        "score": 35,
+        "timestamp": 1744647949,
+        "rewarded": false
+      },
+      {
+        "round": 3,
+        "accuracy": 25.0,
+        "score": 25,
+        "timestamp": 1744647949,
+        "rewarded": false
+      },
+      {
+        "round": 1,
+        "accuracy": 10.0,
+        "score": 10,
+        "timestamp": 1744714122,
+        "rewarded": false
+      },
+      {
+        "round": 2,
+        "accuracy": 5.0,
+        "score": 5,
+        "timestamp": 1744714122,
+        "rewarded": false
+      },
+      {
+        "round": 3,
+        "accuracy": 0.0,
+        "score": 0,
+        "timestamp": 1744714123,
+        "rewarded": false
+      },
+      {
+        "round": 1,
+        "accuracy": 10.0,
+        "score": 10,
+        "timestamp": 1744723603,
+        "rewarded": false
+      },
+      {
+        "round": 2,
+        "accuracy": 10.0,
+        "score": 10,
+        "timestamp": 1744723603,
+        "rewarded": false
+      },
+      {
+        "round": 3,
+        "accuracy": 5.0,
+        "score": 5,
+        "timestamp": 1744723603,
+        "rewarded": false
+      }
+    ]
+  }
+}

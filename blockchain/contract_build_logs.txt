@@ -1,0 +1,50 @@
+This version of µWS is not compatible with your Node.js build:
+
+Error: Cannot find module '../binaries/uws_linux_x64_131.node'
+Require stack:
+- /usr/local/lib/node_modules/truffle/node_modules/ganache/node_modules/@trufflesuite/uws-js-unofficial/src/uws.js
+- /usr/local/lib/node_modules/truffle/node_modules/ganache/dist/node/core.js
+- /usr/local/lib/node_modules/truffle/build/migrate.bundled.js
+- /usr/local/lib/node_modules/truffle/node_modules/original-require/index.js
+- /usr/local/lib/node_modules/truffle/build/cli.bundled.js
+Falling back to a NodeJS implementation; performance may be degraded.
+
+
+
+Compiling your contracts...
+===========================
+> Everything is up to date, there is nothing to compile.
+
+
+Starting migrations...
+======================
+> Network name:    'ganache'
+> Network id:      5777
+> Block gas limit: 6721975 (0x6691b7)
+
+
+2_deploy.js
+===========
+
+   Deploying 'Federation'
+   ----------------------
+   > transaction hash:    0x53c20fcc23623d305053a9393e9eddc4a71c42a2feabe8d7e0c4d80883d05edd
+   > Blocks: 0            Seconds: 0
+   > contract address:    0x2Ced8Bf8EF6Ff26C085529b6C9A840d093b696b8
+   > block number:        1
+   > block timestamp:     1744560533
+   > account:             0xdE1a8A52252a7724aDfb1AcaC300Ea1b2c4eaFE0
+   > balance:             99.991053944875
+   > gas used:            2650683 (0x28723b)
+   > gas price:           3.375 gwei
+   > value sent:          0 ETH
+   > total cost:          0.008946055125 ETH
+
+   > Saving artifacts
+   -------------------------------------
+   > Total cost:      0.008946055125 ETH
+
+Summary
+=======
+> Total deployments:   1
+> Final cost:          0.008946055125 ETH

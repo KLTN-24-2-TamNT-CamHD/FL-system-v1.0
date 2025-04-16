@@ -1,0 +1,29 @@
+{
+    "experiment_name": "fraud_detection_federated",
+    "num_rounds": 3,
+    "min_fit_clients": 2,
+    "min_available_clients": 2,
+    "min_evaluate_clients": 2,
+    "client_epochs": 1,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "accept_failures": false,
+    "blockchain": {
+        "provider_url": "http://192.168.1.146:7545",
+        "contract_address": "0x056272bB5A1979Fe2ebD74160967dAe017018Ba5",
+        "contract_abi_path": "FraudDetectionFederated.json",
+        "private_key": "0x0549b154795ad98766e5f7b3459c56891cbf2d01d3aeec470c05d7ad946d7d9e",
+        "account_address": "0xF9C1965243B05861937EB9d50fFF1Aba60F27061"
+    },
+    "ipfs": {
+        "api_url": "http://localhost:5001/api/v0"
+    },
+    "model": {
+        "input_dim": 50,
+        "hidden_dims": [
+            32,
+            16
+        ],
+        "output_dim": 1
+    }
+}
