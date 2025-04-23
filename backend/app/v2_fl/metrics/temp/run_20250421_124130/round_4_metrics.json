@@ -1,0 +1,20 @@
+{
+  "round": 4,
+  "metrics": {
+    "num_ensembles": 1,
+    "num_models": 5,
+    "model_names": "DeepMLP,GatedMLP,Linear,ResNetMLP,WideMLP",
+    "ensemble_weights": [
+      0.0,
+      0.7335901113382522,
+      0.22385906560959742,
+      0.04255082305215028,
+      0.0
+    ],
+    "total_clients": 1,
+    "authorized_clients": 1,
+    "unauthorized_clients": 0
+  },
+  "num_clients": 1,
+  "timestamp": "2025-04-21T12:41:43.582199+00:00"
+}

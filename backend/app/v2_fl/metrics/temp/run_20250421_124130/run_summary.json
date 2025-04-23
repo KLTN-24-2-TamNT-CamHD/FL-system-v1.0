@@ -1,0 +1,29 @@
+{
+  "timestamp": "20250421_124130",
+  "num_rounds": 5,
+  "min_fit_clients": 1,
+  "min_evaluate_clients": 2,
+  "authorized_clients_only": false,
+  "version_prefix": "1.0",
+  "contract_address": "0xDCE0129848310Cd307d8Dda4B8CaFCdc5F9c6Bde",
+  "final_metrics": {
+    "round": 5,
+    "metrics": {
+      "num_ensembles": 1,
+      "num_models": 5,
+      "model_names": "DeepMLP,GatedMLP,Linear,ResNetMLP,WideMLP",
+      "ensemble_weights": [
+        0.0,
+        0.44760330353211075,
+        0.5523966964678894,
+        0.0,
+        0.0
+      ],
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-21T12:41:44.630502+00:00"
+  }
+}

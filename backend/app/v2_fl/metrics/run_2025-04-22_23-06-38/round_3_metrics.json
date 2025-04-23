@@ -1,0 +1,20 @@
+{
+  "round": 3,
+  "metrics": {
+    "num_ensembles": 1,
+    "num_models": 5,
+    "model_names": "DeepMLP,Linear,LinearRegression,SVC,WideMLP",
+    "ensemble_weights": [
+      0.0,
+      0.1253348264534776,
+      0.0,
+      0.0,
+      0.8746651735465224
+    ],
+    "total_clients": 1,
+    "authorized_clients": 1,
+    "unauthorized_clients": 0
+  },
+  "num_clients": 1,
+  "timestamp": "2025-04-22T16:06:55.567936+00:00"
+}

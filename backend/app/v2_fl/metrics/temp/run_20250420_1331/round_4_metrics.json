@@ -1,0 +1,12 @@
+{
+  "round": 4,
+  "eval_loss": 6.6253814697265625,
+  "eval_metrics": {
+    "total_clients": 1,
+    "authorized_clients": 1,
+    "unauthorized_clients": 0,
+    "avg_accuracy": 10.0
+  },
+  "num_clients": 1,
+  "timestamp": "2025-04-20T06:31:58.864334+00:00"
+}

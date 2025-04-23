@@ -1,0 +1,77 @@
+[
+  {
+    "round": 1,
+    "fit_loss": 7.127178192138672,
+    "accuracy": 5.0,
+    "ensemble_weights": [
+      0.0,
+      0.22770554129277398,
+      0.0,
+      0.772294458707226,
+      0.0
+    ],
+    "ipfs_hash": "QmZuHSyJc3uWFx9fo8bZWoN6jcBSdB66RDEKivvXejVD4C",
+    "wallet_address": "unknown",
+    "timestamp": "2025-04-20T08:47:32.906592+00:00"
+  },
+  {
+    "round": 2,
+    "fit_loss": 7.558689832687378,
+    "accuracy": 0.0,
+    "ensemble_weights": [
+      0.0,
+      0.5859311183651726,
+      0.0,
+      0.049772699753639404,
+      0.364296181881188
+    ],
+    "ipfs_hash": "QmWK2qr2jjDjcXgWwHDisnUo84UrLiXuWp4V1HgQCCB5Nr",
+    "wallet_address": "unknown",
+    "timestamp": "2025-04-20T08:47:34.108334+00:00"
+  },
+  {
+    "round": 3,
+    "fit_loss": 7.3705384731292725,
+    "accuracy": 0.0,
+    "ensemble_weights": [
+      0.09720905246688992,
+      0.2668833251580783,
+      0.0,
+      0.0,
+      0.6359076223750318
+    ],
+    "ipfs_hash": "QmTLEGQFaN8D4mDoy9xWSx3HE7zNVryAJrwwaJj62JBudc",
+    "wallet_address": "unknown",
+    "timestamp": "2025-04-20T08:47:35.337389+00:00"
+  },
+  {
+    "round": 4,
+    "fit_loss": 7.193136215209961,
+    "accuracy": 0.0,
+    "ensemble_weights": [
+      0.4108358634371468,
+      0.17398542326635985,
+      0.0,
+      0.0,
+      0.4151787132964934
+    ],
+    "ipfs_hash": "QmcNtMjZSrKtKEpkMSbE38u44yWRPhS24L1sX61PEwq9XE",
+    "wallet_address": "unknown",
+    "timestamp": "2025-04-20T08:47:36.304834+00:00"
+  },
+  {
+    "round": 5,
+    "fit_loss": 7.044862508773804,
+    "accuracy": 0.0,
+    "ensemble_weights": [
+      0.6621569352659333,
+      0.04659711898267548,
+      0.0,
+      0.0028882970683900434,
+      0.2883576486830012
+    ],
+    "ipfs_hash": "QmNSNNNgC7kBfyVFTKN8ChP1Do5J3WrVx9fKvqnuG6peMQ",
+    "wallet_address": "unknown",
+    "timestamp": "2025-04-20T08:47:37.266952+00:00"
+  }
+]

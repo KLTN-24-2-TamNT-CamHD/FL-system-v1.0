@@ -1,0 +1,167 @@
+[
+  {
+    "round": 1,
+    "metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "rejected_models": 0,
+      "aggregated_weights": [
+        0.26121323884917697,
+        0.6647698982180159,
+        0.07401686293280701
+      ],
+      "num_client_models": 1,
+      "client_avg_accuracy": 30.0
+    },
+    "num_clients": 1,
+    "client_ipfs_hashes": [
+      "QmSuDpR6G2HNgLWXV2ogH6SQrdkW2ScKcdLYmvJG32LPYn"
+    ],
+    "timestamp": "2025-04-20T05:42:32.665629+00:00"
+  },
+  {
+    "round": 1,
+    "eval_loss": 4.527962684631348,
+    "eval_metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 30.0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T05:42:32.708876+00:00"
+  },
+  {
+    "round": 2,
+    "metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "rejected_models": 0,
+      "aggregated_weights": [
+        0.14562129754754402,
+        0.8108237058321948,
+        0.043554996620261105
+      ],
+      "num_client_models": 1,
+      "client_avg_accuracy": 30.0
+    },
+    "num_clients": 1,
+    "client_ipfs_hashes": [
+      "QmfU76Bq5RWcppsMqQkjfqg5xFCfxduZmMrWWo8UWSrQmP"
+    ],
+    "timestamp": "2025-04-20T05:42:32.941999+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": 5.121039390563965,
+    "eval_metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 30.0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T05:42:32.975805+00:00"
+  },
+  {
+    "round": 3,
+    "metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "rejected_models": 0,
+      "aggregated_weights": [
+        0.08909238345655142,
+        0.447273318719409,
+        0.46363429782403953
+      ],
+      "num_client_models": 1,
+      "client_avg_accuracy": 30.0
+    },
+    "num_clients": 1,
+    "client_ipfs_hashes": [
+      "QmeFrge1iTu8tLKFM7imwVdcy1eC5KhXMqfHwzDYPuf8KG"
+    ],
+    "timestamp": "2025-04-20T05:42:33.181647+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 6.843324661254883,
+    "eval_metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 30.0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T05:42:33.211591+00:00"
+  },
+  {
+    "round": 4,
+    "metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "rejected_models": 0,
+      "aggregated_weights": [
+        0.3654680772028845,
+        0.02401338784477583,
+        0.6105185349523397
+      ],
+      "num_client_models": 1,
+      "client_avg_accuracy": 15.0
+    },
+    "num_clients": 1,
+    "client_ipfs_hashes": [
+      "QmRWHob155rye1SuyRyMgSaLoKsdqNJoxXPFnAcyZjQLLB"
+    ],
+    "timestamp": "2025-04-20T05:42:33.445997+00:00"
+  },
+  {
+    "round": 4,
+    "eval_loss": 9.254858016967773,
+    "eval_metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 15.0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T05:42:33.484515+00:00"
+  },
+  {
+    "round": 5,
+    "metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "rejected_models": 0,
+      "aggregated_weights": [
+        0.2178771933895672,
+        0.2980982430194032,
+        0.48402456359102963
+      ],
+      "num_client_models": 1,
+      "client_avg_accuracy": 10.0
+    },
+    "num_clients": 1,
+    "client_ipfs_hashes": [
+      "QmSQYYx94CiH1hRXejC9cKyueYRXWj1HWh4nmWdKJk5X3r"
+    ],
+    "timestamp": "2025-04-20T05:42:33.730602+00:00"
+  },
+  {
+    "round": 5,
+    "eval_loss": 11.796568870544434,
+    "eval_metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 10.0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T05:42:33.766353+00:00"
+  }
+]

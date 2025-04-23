@@ -1,0 +1,68 @@
+[
+  {
+    "round": 1,
+    "metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T06:13:54.400375+00:00"
+  },
+  {
+    "round": 1,
+    "eval_loss": 7.832321643829346,
+    "eval_metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 5.0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T06:13:54.707977+00:00"
+  },
+  {
+    "round": 2,
+    "metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T06:13:54.935119+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": 9.079669952392578,
+    "eval_metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 5.0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T06:13:55.232220+00:00"
+  },
+  {
+    "round": 3,
+    "metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T06:13:55.443046+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 10.326038360595703,
+    "eval_metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 15.0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T06:13:55.743307+00:00"
+  }
+]

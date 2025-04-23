@@ -86,6 +86,10 @@ contract Federation {
         return keccak256(abi.encodePacked(ipfsHash, round));
     }
     
+
+    //////////////////////////////////////////////////////////
+    ///////////   MODEL MANAGEMENT FUNCTIONS  ////////////////
+    //////////////////////////////////////////////////////////
     // Register a new model
     function registerModel(
         string memory ipfsHash, 
@@ -176,54 +180,7 @@ contract Federation {
         
         return modelId;
     }
-    
-    // Get version prefix (e.g., "1.0" from "1.0.3")
-    function getVersionPrefix(string memory version) internal pure returns (string memory) {
-        // This is a simplified implementation that assumes format major.minor.patch
-        bytes memory versionBytes = bytes(version);
-        uint dotCount = 0;
-        uint lastDotPos = 0;
-        
-        for (uint i = 0; i < versionBytes.length; i++) {
-            if (versionBytes[i] == '.') {
-                dotCount++;
-                lastDotPos = i;
-                if (dotCount == 2) break;
-            }
-        }
-        
-        if (dotCount < 2) return version; // No patch number found
-        
-        // Create prefix (major.minor)
-        bytes memory prefix = new bytes(lastDotPos);
-        for (uint i = 0; i < lastDotPos; i++) {
-            prefix[i] = versionBytes[i];
-        }
-        
-        return string(prefix);
-    }
-    
-    // Compare versions (returns true if v1 is newer than v2)
-    function compareVersions(string memory v1, string memory v2) internal pure returns (bool) {
-        // Simple string comparison - assumes properly formatted semantic versions
-        // In a production environment, this would parse and compare version components
-        bytes memory b1 = bytes(v1);
-        bytes memory b2 = bytes(v2);
-        
-        for (uint i = 0; i < b1.length && i < b2.length; i++) {
-            if (b1[i] != b2[i]) {
-                return b1[i] > b2[i];
-            }
-        }
-        
-        return b1.length > b2.length;
-    }
-    
-    // Get the version from a model ID
-    function getVersionFromModelId(bytes32 modelId) public view returns (string memory) {
-        return models[modelId].version;
-    }
-    
+
     // Get the latest model for a specific version prefix
     function getLatestModel(string memory versionPrefix) public view returns (
         bytes32 modelId,
@@ -303,6 +260,55 @@ contract Federation {
         );
     }
     
+    // Get version prefix (e.g., "1.0" from "1.0.3")
+    function getVersionPrefix(string memory version) internal pure returns (string memory) {
+        // This is a simplified implementation that assumes format major.minor.patch
+        bytes memory versionBytes = bytes(version);
+        uint dotCount = 0;
+        uint lastDotPos = 0;
+        
+        for (uint i = 0; i < versionBytes.length; i++) {
+            if (versionBytes[i] == '.') {
+                dotCount++;
+                lastDotPos = i;
+                if (dotCount == 2) break;
+            }
+        }
+        
+        if (dotCount < 2) return version; // No patch number found
+        
+        // Create prefix (major.minor)
+        bytes memory prefix = new bytes(lastDotPos);
+        for (uint i = 0; i < lastDotPos; i++) {
+            prefix[i] = versionBytes[i];
+        }
+        
+        return string(prefix);
+    }
+    
+    // Compare versions (returns true if v1 is newer than v2)
+    function compareVersions(string memory v1, string memory v2) internal pure returns (bool) {
+        // Simple string comparison - assumes properly formatted semantic versions
+        // In a production environment, this would parse and compare version components
+        bytes memory b1 = bytes(v1);
+        bytes memory b2 = bytes(v2);
+        
+        for (uint i = 0; i < b1.length && i < b2.length; i++) {
+            if (b1[i] != b2[i]) {
+                return b1[i] > b2[i];
+            }
+        }
+        
+        return b1.length > b2.length;
+    }
+    
+    // Get the version from a model ID
+    function getVersionFromModelId(bytes32 modelId) public view returns (string memory) {
+        return models[modelId].version;
+    }
+    
+    
+    
     // Deactivate a model (e.g., if it's found to be problematic)
     function deactivateModel(bytes32 modelId) public onlyOwner {
         require(models[modelId].timestamp > 0, "Model does not exist");
@@ -313,6 +319,9 @@ contract Federation {
         emit ModelDeactivated(modelId);
     }
     
+    //////////////////////////////////////////////////////////
+    ///////////   MODEL MANAGEMENT FUNCTIONS  ////////////////
+    //////////////////////////////////////////////////////////
     // Authorize a client to participate in federated learning
     function authorizeClient(address clientAddress) public onlyOwner {
         require(clientAddress != address(0), "Invalid client address");

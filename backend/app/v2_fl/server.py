@@ -1,6 +1,6 @@
 """
-Enhanced Federated Learning Server with IPFS and Blockchain integration.
-Supports client authorization and contribution tracking using wallet addresses.
+Enhanced Federated Learning Server with GA-Stacking support, IPFS and Blockchain integration.
+Supports client authorization, contribution tracking, and ensemble model aggregation.
 """
 
 import os
@@ -11,6 +11,8 @@ from typing import Dict, List, Optional, Tuple, Union, Any, Set
 from datetime import datetime, timezone
 import logging
 from pathlib import Path
+
+import pytz
 
 import flwr as fl
 from flwr.server.client_proxy import ClientProxy
@@ -28,6 +30,7 @@ import numpy as np
 
 from ipfs_connector import IPFSConnector
 from blockchain_connector import BlockchainConnector
+from ensemble_aggregation import EnsembleAggregator
 
 # Configure logging
 logging.basicConfig(
@@ -36,8 +39,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("FL-Server")
 
-class EnhancedFedAvg(fl.server.strategy.FedAvg):
-    """Enhanced Federated Averaging strategy with IPFS, blockchain authentication and rewards."""
+class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
+    """Enhanced Federated Averaging strategy with GA-Stacking, IPFS, and blockchain integration."""
     
     def __init__(
         self,
@@ -47,6 +50,7 @@ class EnhancedFedAvg(fl.server.strategy.FedAvg):
         version_prefix: str = "1.0",
         authorized_clients_only: bool = True,
         round_rewards: int = 1000,  # Reward points to distribute each round
+        device: str = "cpu",
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -75,10 +79,13 @@ class EnhancedFedAvg(fl.server.strategy.FedAvg):
         # Metrics storage
         self.metrics_history = []
         
+        # Ensemble aggregator
+        self.ensemble_aggregator = EnsembleAggregator(device=device)
+        
         # Load authorized clients from blockchain
         self._load_authorized_clients()
         
-        logger.info(f"Initialized EnhancedFedAvg with IPFS node: {self.ipfs.ipfs_api_url}")
+        logger.info(f"Initialized EnhancedFedAvgWithGA with IPFS node: {self.ipfs.ipfs_api_url}")
         if self.blockchain:
             logger.info(f"Blockchain integration enabled")
             if self.authorized_clients_only:
@@ -126,71 +133,115 @@ class EnhancedFedAvg(fl.server.strategy.FedAvg):
     def get_version(self, round_num: int) -> str:
         """Generate a version string based on round number."""
         return f"{self.version_prefix}.{round_num}"
-    
+
     def initialize_parameters(
-        self, client_manager: fl.server.client_manager.ClientManager
-    ) -> Optional[Parameters]:
-        """Initialize global model parameters."""
-        
-        # Check if we already have a model in blockchain/IPFS
-        if self.blockchain:
-            try:
-                # Try to get the latest model from blockchain
-                latest_model = self.blockchain.get_latest_model(self.version_prefix)
-                ipfs_hash = latest_model["ipfs_hash"]
-                
-                logger.info(f"Found existing model in blockchain: {ipfs_hash} (round {latest_model['round']})")
-                
-                # Retrieve model from IPFS
-                model_data = self.ipfs.get_json(ipfs_hash)
-                if model_data and "state_dict" in model_data:
-                    # Convert state_dict to ndarrays
-                    weights = [
-                        np.array(v, dtype=np.float32)
-                        for k, v in model_data["state_dict"].items()
-                    ]
-                    parameters = ndarrays_to_parameters(weights)
-                    return parameters
+            self, client_manager: fl.server.client_manager.ClientManager
+        ) -> Optional[Parameters]:
+            """Initialize global model parameters."""
             
-            except Exception as e:
-                logger.warning(f"Could not retrieve latest model from blockchain: {e}")
-                logger.info("Falling back to random initialization")
-        
-        # Fall back to default initialization
-        return super().initialize_parameters(client_manager)
-    
+            # Define the correct dimensions
+            input_dim = 10  # Feature dimension
+            output_dim = 1  # Output dimension
+            num_base_models = 3  # Number of base models
+            
+            # Define initial model ensemble configuration with correct dimensions
+            initial_ensemble_config = [
+                {
+                    "estimator": "lr",
+                    "input_dim": input_dim,
+                    "output_dim": output_dim,
+                    "coef": [[0.0] * input_dim],  # Initialize with zeros
+                    "intercept": [0.0]
+                },
+                {
+                    "estimator": "svc",
+                    "input_dim": input_dim,
+                    "output_dim": output_dim,
+                    "dual_coef": [[0.4321, -0.4321]],
+                    "support_vectors": [
+                        [0.0] * input_dim,
+                        [0.0] * input_dim
+                    ],
+                    "intercept": [0.5000]
+                },
+                {
+                    "estimator": "rf",
+                    "input_dim": input_dim,
+                    "output_dim": output_dim,
+                    "n_estimators": 100,
+                    "feature_importances": [1.0/input_dim] * input_dim
+                },
+                {
+                    "estimator": "meta_lr",
+                    "input_dim": num_base_models,
+                    "meta_input_dim": num_base_models,
+                    "output_dim": output_dim,
+                    "coef": [[1.0/num_base_models] * num_base_models],
+                    "intercept": [0.0]
+                }
+            ]
+            
+            # Create ensemble state with initial configuration
+            ensemble_state = {
+                "model_parameters": initial_ensemble_config,
+                "weights": [0.25, 0.25, 0.25, 0.25],  # Equal initial weights
+                "model_names": ["lr", "svc", "rf", "meta_lr"]
+            }
+            
+            # Serialize ensemble state
+            ensemble_bytes = json.dumps(ensemble_state).encode('utf-8')
+            parameters = ndarrays_to_parameters([np.frombuffer(ensemble_bytes, dtype=np.uint8)])
+            
+            logger.info(f"Initialized server with custom ensemble configuration: input_dim={input_dim}, meta_input_dim={num_base_models}")
+            
+            return parameters
+
     def configure_fit(
         self, server_round: int, parameters: Parameters, client_manager: fl.server.client_manager.ClientManager
     ) -> List[Tuple[ClientProxy, FitIns]]:
-        """Configure the next round of training, sending only IPFS hash."""
+        """Configure the next round of training."""
         
         # Reset round contributions
         self.current_round_contributions = {}
         
-        # Store global model in IPFS
-        weights = parameters_to_ndarrays(parameters)
+        # Get parameters as ndarrays
+        params_ndarrays = parameters_to_ndarrays(parameters)
         
-        # Create state dict from weights
-        state_dict = {}
-        layer_names = ["linear.weight", "linear.bias"]  # Adjust based on your model
-        
-        for i, name in enumerate(layer_names):
-            if i < len(weights):
-                state_dict[name] = weights[i].tolist()
-        
-        # Create metadata
-        model_metadata = {
-            "state_dict": state_dict,
-            "info": {
-                "round": server_round,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "version": self.get_version(server_round)
-            }
-        }
+        # Check if we have an ensemble or a regular model
+        is_ensemble = len(params_ndarrays) == 1 and params_ndarrays[0].dtype == np.uint8
         
         # Store in IPFS
-        ipfs_hash = self.ipfs.add_json(model_metadata)
-        logger.info(f"Stored global model in IPFS: {ipfs_hash}")
+        if is_ensemble:
+            # Handle ensemble model
+            try:
+                # Deserialize ensemble
+                ensemble_bytes = params_ndarrays[0].tobytes()
+                ensemble_state = json.loads(ensemble_bytes.decode('utf-8'))
+                
+                # Create metadata with ensemble state
+                model_metadata = {
+                    "ensemble_state": ensemble_state,
+                    "info": {
+                        "round": server_round,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "version": self.get_version(server_round),
+                        "is_ensemble": True,
+                        "num_models": len(ensemble_state["model_names"]),
+                        "model_names": ensemble_state["model_names"]
+                    }
+                }
+                
+                # Store in IPFS
+                ipfs_hash = self.ipfs.add_json(model_metadata)
+                logger.info(f"Stored ensemble model in IPFS: {ipfs_hash}")
+                
+            except Exception as e:
+                logger.error(f"Failed to process ensemble model: {e}")
+                # Fall back to storing raw parameters
+                ipfs_hash = self._store_raw_parameters_in_ipfs(params_ndarrays, server_round)
+        else:
+            # Handle regular model
+            ipfs_hash = self._store_raw_parameters_in_ipfs(params_ndarrays, server_round)
         
         # Register in blockchain if available
         if self.blockchain:
@@ -202,24 +253,21 @@ class EnhancedFedAvg(fl.server.strategy.FedAvg):
                     version=self.get_version(server_round),
                     participating_clients=0  # Will be updated after fit
                 )
-                logger.info(f"Registered global model in blockchain, tx: {tx_hash}")
+                logger.info(f"Registered model in blockchain, tx: {tx_hash}")
             except Exception as e:
                 logger.error(f"Failed to register model in blockchain: {e}")
         
-        # Include only IPFS hash in config
-        #config = {"ipfs_hash": ipfs_hash, "server_round": server_round}
-        
-        # Create config for only transferring IPFS hash
+        # Configure fit instructions for clients with is_ensemble flag
         config = {
             "ipfs_hash": ipfs_hash, 
             "server_round": server_round,
-            "cid_only": True  # Flag to indicate we're only sending CID
+            "ga_stacking": True,  # Enable GA-Stacking on clients
+            "local_epochs": 5,
+            "validation_split": 0.2,
+            "is_ensemble": is_ensemble  # Add this flag to indicate ensemble model
         }
-        # Create empty/minimal parameters object
-        minimal_params = ndarrays_to_parameters([np.array([0.0])])
         
-        # Configure fit instructions for clients
-        fit_ins = FitIns(minimal_params, config)
+        fit_ins = FitIns(parameters, config)
         
         # Sample clients for this round
         clients = client_manager.sample(
@@ -229,6 +277,33 @@ class EnhancedFedAvg(fl.server.strategy.FedAvg):
         
         # Return client/config pairs
         return [(client, fit_ins) for client in clients]
+
+    def _store_raw_parameters_in_ipfs(self, params_ndarrays: List[np.ndarray], server_round: int) -> str:
+        """Store raw parameters in IPFS."""
+        # Create state dict from weights
+        state_dict = {}
+        layer_names = ["linear.weight", "linear.bias"]  # Adjust based on your model
+        
+        for i, name in enumerate(layer_names):
+            if i < len(params_ndarrays):
+                state_dict[name] = params_ndarrays[i].tolist()
+        
+        # Create metadata
+        model_metadata = {
+            "state_dict": state_dict,
+            "info": {
+                "round": server_round,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "version": self.get_version(server_round),
+                "is_ensemble": False
+            }
+        }
+        
+        # Store in IPFS
+        ipfs_hash = self.ipfs.add_json(model_metadata)
+        logger.info(f"Stored global model in IPFS: {ipfs_hash}")
+        
+        return ipfs_hash
     
     def aggregate_fit(
         self,
@@ -241,11 +316,9 @@ class EnhancedFedAvg(fl.server.strategy.FedAvg):
         # Filter out unauthorized clients
         authorized_results = []
         unauthorized_clients = []
-        rejected_models = []
         
         for client, fit_res in results:
             wallet_address = fit_res.metrics.get("wallet_address", "unknown")
-            client_ipfs_hash = fit_res.metrics.get("client_ipfs_hash")
             
             # Check for auth error flag
             if fit_res.metrics.get("error") == "client_not_authorized":
@@ -254,61 +327,21 @@ class EnhancedFedAvg(fl.server.strategy.FedAvg):
                 continue
             
             # Verify client authorization
-            if not self.is_client_authorized(wallet_address):
-                logger.warning(f"Rejecting contribution from unauthorized client: {wallet_address}")
-                unauthorized_clients.append((client, wallet_address))
-                continue
-
-            # Verify model integrity by checking against blockchain
-            if self.blockchain and client_ipfs_hash:
-                try:
-                    # Get the client's contributions from blockchain
-                    records = self.blockchain.get_client_contribution_records(wallet_address)
-                    if not records or "ipfs_hashes" not in records:
-                        logger.warning(f"No contribution records found for client {wallet_address}")
-                        rejected_models.append((client, wallet_address, "no_records"))
-                        continue
-                    
-                    # Check if the submitted IPFS hash matches what's on the blockchain
-                    ipfs_hashes = records["ipfs_hashes"]
-                    rounds = records["rounds"]
-                    
-                    # Find records for the current round
-                    for i, r in enumerate(rounds):
-                        if r == server_round and ipfs_hashes[i] == client_ipfs_hash:
-                            # Hash verified on blockchain
-                            logger.info(f"Verified model hash {client_ipfs_hash} on blockchain for client {wallet_address}")
-                            authorized_results.append((client, fit_res))
-                            
-                            # Record contribution metrics
-                            if client_ipfs_hash and wallet_address != "unknown":
-                                accuracy = fit_res.metrics.get("accuracy", 0.0)
-                                self.current_round_contributions[wallet_address] = {
-                                    "ipfs_hash": client_ipfs_hash,
-                                    "accuracy": accuracy
-                                }
-                            break
-                    else:
-                        # Hash not found on blockchain for this round
-                        logger.warning(f"Rejecting model from {wallet_address}: Hash {client_ipfs_hash} not verified on blockchain")
-                        rejected_models.append((client, wallet_address, "hash_mismatch"))
-                    
-                except Exception as e:
-                    logger.error(f"Error verifying contribution on blockchain: {e}")
-                    # In case of verification error, reject to be safe
-                    rejected_models.append((client, wallet_address, "verification_error"))
-            else:
-                # If blockchain verification isn't available, accept the model but log a warning
-                logger.warning(f"Accepting unverified model from {wallet_address} without blockchain verification")
+            if self.is_client_authorized(wallet_address):
                 authorized_results.append((client, fit_res))
                 
                 # Record contribution metrics
+                client_ipfs_hash = fit_res.metrics.get("client_ipfs_hash")
+                accuracy = fit_res.metrics.get("accuracy", 0.0)
+                
                 if client_ipfs_hash and wallet_address != "unknown":
-                    accuracy = fit_res.metrics.get("accuracy", 0.0)
                     self.current_round_contributions[wallet_address] = {
                         "ipfs_hash": client_ipfs_hash,
                         "accuracy": accuracy
                     }
+            else:
+                logger.warning(f"Rejecting contribution from unauthorized client: {wallet_address}")
+                unauthorized_clients.append((client, wallet_address))
         
         # Check if enough clients returned results
         if not authorized_results:
@@ -318,19 +351,46 @@ class EnhancedFedAvg(fl.server.strategy.FedAvg):
                 logger.error("No clients returned results. No aggregation possible.")
             return None, {"error": "no_authorized_clients"}
         
-        # Perform aggregation with only authorized clients
-        parameters_aggregated, metrics = super().aggregate_fit(server_round, authorized_results, failures)
+        # Calculate the total number of examples used for training
+        num_examples_total = sum([fit_res.num_examples for _, fit_res in authorized_results])
+        
+        # Create weights for weighted average of client models
+        if num_examples_total > 0:
+            weights = [fit_res.num_examples / num_examples_total for _, fit_res in authorized_results]
+        else:
+            weights = [1.0 / len(authorized_results) for _ in authorized_results]
+        
+        # Check if we need to aggregate ensembles or regular models
+        any_ensemble = False
+        for _, fit_res in authorized_results:
+            params = parameters_to_ndarrays(fit_res.parameters)
+            if len(params) == 1 and params[0].dtype == np.uint8:
+                any_ensemble = True
+                break
+        
+        # Aggregate the updates
+        if any_ensemble:
+            # Use ensemble aggregation
+            logger.info("Aggregating ensemble models")
+            parameters_aggregated, agg_metrics = self.ensemble_aggregator.aggregate_fit_results(
+                authorized_results, weights
+            )
+        else:
+            # Fall back to standard FedAvg
+            logger.info("Aggregating standard models")
+            parameters_aggregated, metrics = super().aggregate_fit(server_round, authorized_results, failures)
+            agg_metrics = metrics
         
         if parameters_aggregated is not None:
             # Add metrics about client participation
-            metrics["total_clients"] = len(results)
-            metrics["authorized_clients"] = len(authorized_results)
-            metrics["unauthorized_clients"] = len(unauthorized_clients)
+            agg_metrics["total_clients"] = len(results)
+            agg_metrics["authorized_clients"] = len(authorized_results)
+            agg_metrics["unauthorized_clients"] = len(unauthorized_clients)
             
             # Store metrics for history
             self.metrics_history.append({
                 "round": server_round,
-                "metrics": metrics,
+                "metrics": agg_metrics,
                 "num_clients": len(authorized_results),
                 "timestamp": datetime.now(timezone.utc).isoformat()
             })
@@ -370,7 +430,6 @@ class EnhancedFedAvg(fl.server.strategy.FedAvg):
                     
                     if ipfs_hash:
                         # Update model in blockchain with actual client count
-                        # Use register_or_update_model instead of register_model
                         tx_hash = self.blockchain.register_or_update_model(
                             ipfs_hash=ipfs_hash,
                             round_num=server_round,
@@ -381,39 +440,52 @@ class EnhancedFedAvg(fl.server.strategy.FedAvg):
                 except Exception as e:
                     logger.error(f"Failed to update model in blockchain: {e}")
         
-        metrics["rejected_models"] = len(rejected_models)
-        return parameters_aggregated, metrics
+        return parameters_aggregated, agg_metrics
     
     def configure_evaluate(
         self, server_round: int, parameters: Parameters, client_manager: fl.server.client_manager.ClientManager
     ) -> List[Tuple[ClientProxy, EvaluateIns]]:
         """Configure the evaluation round."""
         
-        # Get IPFS hash from previous fit round (similar approach to configure_fit)
-        weights = parameters_to_ndarrays(parameters)
+        # Get parameters as ndarrays
+        params_ndarrays = parameters_to_ndarrays(parameters)
         
-        # Create state dict from weights
-        state_dict = {}
-        layer_names = ["linear.weight", "linear.bias"]  # Adjust based on your model
+        # Check if we have an ensemble or a regular model
+        is_ensemble = len(params_ndarrays) == 1 and params_ndarrays[0].dtype == np.uint8
         
-        for i, name in enumerate(layer_names):
-            if i < len(weights):
-                state_dict[name] = weights[i].tolist()
-        
-        # Create metadata with evaluation flag
-        model_metadata = {
-            "state_dict": state_dict,
-            "info": {
-                "round": server_round,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "version": self.get_version(server_round),
-                "evaluation": True
-            }
-        }
-        
-        # Store in IPFS
-        ipfs_hash = self.ipfs.add_json(model_metadata)
-        logger.info(f"Stored evaluation model in IPFS: {ipfs_hash}")
+        # Store in IPFS with evaluation flag
+        if is_ensemble:
+            # Handle ensemble model
+            try:
+                # Deserialize ensemble
+                ensemble_bytes = params_ndarrays[0].tobytes()
+                ensemble_state = json.loads(ensemble_bytes.decode('utf-8'))
+                
+                # Create metadata with ensemble state and evaluation flag
+                model_metadata = {
+                    "ensemble_state": ensemble_state,
+                    "info": {
+                        "round": server_round,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "version": self.get_version(server_round),
+                        "is_ensemble": True,
+                        "evaluation": True,
+                        "num_models": len(ensemble_state["model_names"]),
+                        "model_names": ensemble_state["model_names"]
+                    }
+                }
+                
+                # Store in IPFS
+                ipfs_hash = self.ipfs.add_json(model_metadata)
+                logger.info(f"Stored evaluation ensemble model in IPFS: {ipfs_hash}")
+                
+            except Exception as e:
+                logger.error(f"Failed to process ensemble model for evaluation: {e}")
+                # Fall back to storing raw parameters
+                ipfs_hash = self._store_raw_parameters_in_ipfs_for_eval(params_ndarrays, server_round)
+        else:
+            # Handle regular model
+            ipfs_hash = self._store_raw_parameters_in_ipfs_for_eval(params_ndarrays, server_round)
         
         # Include IPFS hash in config
         config = {"ipfs_hash": ipfs_hash, "server_round": server_round}
@@ -429,6 +501,34 @@ class EnhancedFedAvg(fl.server.strategy.FedAvg):
         
         # Return client/config pairs
         return [(client, evaluate_ins) for client in clients]
+    
+    def _store_raw_parameters_in_ipfs_for_eval(self, params_ndarrays: List[np.ndarray], server_round: int) -> str:
+        """Store raw parameters in IPFS for evaluation."""
+        # Create state dict from weights
+        state_dict = {}
+        layer_names = ["linear.weight", "linear.bias"]  # Adjust based on your model
+        
+        for i, name in enumerate(layer_names):
+            if i < len(params_ndarrays):
+                state_dict[name] = params_ndarrays[i].tolist()
+        
+        # Create metadata with evaluation flag
+        model_metadata = {
+            "state_dict": state_dict,
+            "info": {
+                "round": server_round,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "version": self.get_version(server_round),
+                "is_ensemble": False,
+                "evaluation": True
+            }
+        }
+        
+        # Store in IPFS
+        ipfs_hash = self.ipfs.add_json(model_metadata)
+        logger.info(f"Stored evaluation model in IPFS: {ipfs_hash}")
+        
+        return ipfs_hash
     
     def aggregate_evaluate(
         self,
@@ -465,8 +565,31 @@ class EnhancedFedAvg(fl.server.strategy.FedAvg):
                 logger.error("No clients returned evaluation results.")
             return None, {"error": "no_authorized_clients"}
         
-        # Perform aggregation with only authorized clients
-        loss_aggregated, metrics = super().aggregate_evaluate(server_round, authorized_results, failures)
+        # Check if any client has returned ensemble metrics
+        has_ensemble_metrics = False
+        for _, eval_res in authorized_results:
+            if eval_res.metrics.get("ensemble_size", 0) > 1:
+                has_ensemble_metrics = True
+                break
+        
+        # Calculate the total number of examples
+        num_examples_total = sum([eval_res.num_examples for _, eval_res in authorized_results])
+        
+        # Create weights for weighted average
+        if num_examples_total > 0:
+            weights = [eval_res.num_examples / num_examples_total for _, eval_res in authorized_results]
+        else:
+            weights = [1.0 / len(authorized_results) for _ in authorized_results]
+        
+        # Aggregate evaluation results
+        if has_ensemble_metrics:
+            # Use ensemble evaluation aggregation
+            loss_aggregated, metrics = self.ensemble_aggregator.aggregate_evaluate_results(
+                authorized_results, weights
+            )
+        else:
+            # Use standard aggregation
+            loss_aggregated, metrics = super().aggregate_evaluate(server_round, authorized_results, failures)
         
         # Add metrics about client participation
         metrics["total_clients"] = len(results)
@@ -498,20 +621,20 @@ class EnhancedFedAvg(fl.server.strategy.FedAvg):
         return loss_aggregated, metrics
     
     def save_metrics_history(self, filepath: str = "metrics/metrics_history.json"):
-            """Save metrics history to a file."""
-            # Save combined metrics history
-            with open(filepath, "w") as f:
-                json.dump(self.metrics_history, f, indent=2)
-            logger.info(f"Saved metrics history to {filepath}")
-            
-            # Save individual round metrics to separate files
-            metrics_dir = Path(filepath).parent
-            for round_metrics in self.metrics_history:
-                round_num = round_metrics.get("round", 0)
-                round_file = metrics_dir / f"round_{round_num}_metrics.json"
-                with open(round_file, "w") as f:
-                    json.dump(round_metrics, f, indent=2)
-                logger.info(f"Saved round {round_num} metrics to {round_file}")
+        """Save metrics history to a file."""
+        # Save combined metrics history
+        with open(filepath, "w") as f:
+            json.dump(self.metrics_history, f, indent=2)
+        logger.info(f"Saved metrics history to {filepath}")
+        
+        # Save individual round metrics to separate files
+        metrics_dir = Path(filepath).parent
+        for round_metrics in self.metrics_history:
+            round_num = round_metrics.get("round", 0)
+            round_file = metrics_dir / f"round_{round_num}_metrics.json"
+            with open(round_file, "w") as f:
+                json.dump(round_metrics, f, indent=2)
+            logger.info(f"Saved round {round_num} metrics to {round_file}")
     
     def save_client_stats(self, filepath: str = "metrics/client_stats.json"):
         """Save client contribution statistics to a file."""
@@ -622,10 +745,11 @@ def start_server(
     version_prefix: str = "1.0",
     authorized_clients_only: bool = True,
     authorized_clients: Optional[List[str]] = None,
-    round_rewards: int = 1000
+    round_rewards: int = 1000,
+    device: str = "cpu"
 ) -> None:
     """
-    Start the enhanced federated learning server with IPFS and blockchain integration.
+    Start the enhanced federated learning server with GA-Stacking, IPFS and blockchain integration.
     
     Args:
         server_address: Server address (host:port)
@@ -642,6 +766,7 @@ def start_server(
         authorized_clients_only: Whether to only accept contributions from authorized clients
         authorized_clients: List of client addresses to authorize (if not already authorized)
         round_rewards: Reward points to distribute each round
+        device: Device to use for computation
     """
     # Initialize IPFS connector
     ipfs_connector = IPFSConnector(ipfs_api_url=ipfs_url)
@@ -695,8 +820,8 @@ def start_server(
             logger.warning("Continuing without blockchain integration")
             blockchain_connector = None
     
-    # Configure strategy
-    strategy = EnhancedFedAvg(
+    # Configure strategy with GA-Stacking support
+    strategy = EnhancedFedAvgWithGA(
         fraction_fit=fraction_fit,
         min_fit_clients=min_fit_clients,
         min_evaluate_clients=min_evaluate_clients,
@@ -705,11 +830,15 @@ def start_server(
         blockchain_connector=blockchain_connector,
         version_prefix=version_prefix,
         authorized_clients_only=authorized_clients_only,
-        round_rewards=round_rewards
+        round_rewards=round_rewards,
+        device=device
     )
     
     # Create metrics directory with timestamp to keep each training run separate
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    vn_timezone = pytz.timezone('Asia/Ho_Chi_Minh')
+
+    local_time = datetime.now(vn_timezone)
+    timestamp = local_time.strftime("%Y-%m-%d_%H-%M-%S")
     metrics_dir = Path(f"metrics/run_{timestamp}")
     metrics_dir.mkdir(parents=True, exist_ok=True)
     
@@ -747,19 +876,19 @@ def start_server(
     with open(metrics_dir / "run_summary.json", "w") as f:
         json.dump(summary, f, indent=2)
     
-    logger.info(f"Server completed {num_rounds} rounds of federated learning")
+    logger.info(f"Server completed {num_rounds} rounds of federated learning with GA-Stacking")
     logger.info(f"All metrics saved to {metrics_dir}")
 
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="Start enhanced FL server with IPFS and blockchain integration")
-    parser.add_argument("--server-address", type=str, default="0.0.0.0:8080", help="Server address (host:port)")
+    parser = argparse.ArgumentParser(description="Start enhanced FL server with GA-Stacking, IPFS and blockchain integration")
+    parser.add_argument("--server-address", type=str, default="0.0.0.0:8088", help="Server address (host:port)")
     parser.add_argument("--rounds", type=int, default=3, help="Number of federated learning rounds")
     parser.add_argument("--min-fit-clients", type=int, default=2, help="Minimum number of clients for training")
     parser.add_argument("--min-evaluate-clients", type=int, default=2, help="Minimum number of clients for evaluation")
     parser.add_argument("--fraction-fit", type=float, default=1.0, help="Fraction of clients to use for training")
-    parser.add_argument("--ipfs-url", type=str, default="http://127.0.0.1:5001", help="IPFS API URL")
+    parser.add_argument("--ipfs-url", type=str, default="http://127.0.0.1:5001/api/v0", help="IPFS API URL")
     parser.add_argument("--ganache-url", type=str, default="http://192.168.1.146:7545", help="Ganache blockchain URL")
     parser.add_argument("--contract-address", type=str, help="Federation contract address")
     parser.add_argument("--private-key", type=str, help="Private key for blockchain transactions")
@@ -768,6 +897,7 @@ if __name__ == "__main__":
     parser.add_argument("--authorized-clients-only", action="store_true", help="Only accept contributions from authorized clients")
     parser.add_argument("--authorize-clients", nargs="+", help="List of client addresses to authorize")
     parser.add_argument("--round-rewards", type=int, default=1000, help="Reward points to distribute each round")
+    parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"], help="Device for computation")
     
     args = parser.parse_args()
     
@@ -794,5 +924,6 @@ if __name__ == "__main__":
         version_prefix=args.version_prefix,
         authorized_clients_only=args.authorized_clients_only,
         authorized_clients=args.authorize_clients,
-        round_rewards=args.round_rewards
+        round_rewards=args.round_rewards,
+        device=args.device
     )

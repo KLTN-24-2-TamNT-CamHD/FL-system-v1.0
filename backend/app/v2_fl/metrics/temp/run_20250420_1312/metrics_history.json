@@ -1,0 +1,38 @@
+[
+  {
+    "round": 1,
+    "eval_loss": 27.139984130859375,
+    "eval_metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 10.0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T06:12:57.708156+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": 27.43459129333496,
+    "eval_metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 10.0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T06:12:58.110325+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 27.723079681396484,
+    "eval_metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 5.0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T06:12:58.504484+00:00"
+  }
+]

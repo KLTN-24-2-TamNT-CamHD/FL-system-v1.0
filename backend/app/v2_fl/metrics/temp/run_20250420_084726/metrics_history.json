@@ -1,0 +1,102 @@
+[
+  {
+    "round": 1,
+    "metrics": {
+      "num_ensembles": 1,
+      "num_models": 5,
+      "model_names": "DeepMLP,GatedMLP,Linear,ResNetMLP,WideMLP",
+      "ensemble_weights": [
+        0.0,
+        0.0,
+        0.0,
+        0.772294458707226,
+        0.22770554129277398
+      ],
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T08:47:33.059518+00:00"
+  },
+  {
+    "round": 2,
+    "metrics": {
+      "num_ensembles": 1,
+      "num_models": 5,
+      "model_names": "DeepMLP,GatedMLP,Linear,ResNetMLP,WideMLP",
+      "ensemble_weights": [
+        0.0,
+        0.364296181881188,
+        0.0,
+        0.049772699753639404,
+        0.5859311183651726
+      ],
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T08:47:34.339022+00:00"
+  },
+  {
+    "round": 3,
+    "metrics": {
+      "num_ensembles": 1,
+      "num_models": 5,
+      "model_names": "DeepMLP,GatedMLP,Linear,ResNetMLP,WideMLP",
+      "ensemble_weights": [
+        0.0,
+        0.6359076223750318,
+        0.09720905246688992,
+        0.0,
+        0.2668833251580783
+      ],
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T08:47:35.421583+00:00"
+  },
+  {
+    "round": 4,
+    "metrics": {
+      "num_ensembles": 1,
+      "num_models": 5,
+      "model_names": "DeepMLP,GatedMLP,Linear,ResNetMLP,WideMLP",
+      "ensemble_weights": [
+        0.0,
+        0.4151787132964934,
+        0.4108358634371468,
+        0.0,
+        0.17398542326635985
+      ],
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T08:47:36.379598+00:00"
+  },
+  {
+    "round": 5,
+    "metrics": {
+      "num_ensembles": 1,
+      "num_models": 5,
+      "model_names": "DeepMLP,GatedMLP,Linear,ResNetMLP,WideMLP",
+      "ensemble_weights": [
+        0.0,
+        0.2883576486830012,
+        0.6621569352659333,
+        0.0028882970683900434,
+        0.04659711898267548
+      ],
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T08:47:37.338559+00:00"
+  }
+]

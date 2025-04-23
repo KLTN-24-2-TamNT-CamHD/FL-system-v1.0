@@ -1,0 +1,23 @@
+{
+  "timestamp": "20250420_1425",
+  "num_rounds": 5,
+  "min_fit_clients": 1,
+  "min_evaluate_clients": 1,
+  "authorized_clients_only": false,
+  "version_prefix": "1.0",
+  "contract_address": "0xDCE0129848310Cd307d8Dda4B8CaFCdc5F9c6Bde",
+  "num_base_models": 3,
+  "algorithm": "GA-Stacking",
+  "final_metrics": {
+    "round": 5,
+    "eval_loss": 12.405557632446289,
+    "eval_metrics": {
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 0.0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-20T07:25:30.780189+00:00"
+  }
+}
