@@ -1,0 +1,110 @@
+{
+  "details": {
+    "contribution_count": 14,
+    "total_score": 145,
+    "is_authorized": true,
+    "last_contribution_timestamp": 1745732293,
+    "rewards_earned": 0,
+    "rewards_claimed": false
+  },
+  "records": [
+    {
+      "round": 1,
+      "accuracy": 15.0,
+      "score": 15,
+      "timestamp": 1745730793,
+      "rewarded": false
+    },
+    {
+      "round": 1,
+      "accuracy": 15.0,
+      "score": 15,
+      "timestamp": 1745731076,
+      "rewarded": false
+    },
+    {
+      "round": 2,
+      "accuracy": 10.0,
+      "score": 10,
+      "timestamp": 1745731078,
+      "rewarded": false
+    },
+    {
+      "round": 3,
+      "accuracy": 15.0,
+      "score": 15,
+      "timestamp": 1745731081,
+      "rewarded": false
+    },
+    {
+      "round": 3,
+      "accuracy": 15.0,
+      "score": 15,
+      "timestamp": 1745731081,
+      "rewarded": false
+    },
+    {
+      "round": 1,
+      "accuracy": 15.0,
+      "score": 15,
+      "timestamp": 1745732059,
+      "rewarded": false
+    },
+    {
+      "round": 2,
+      "accuracy": 20.0,
+      "score": 20,
+      "timestamp": 1745732061,
+      "rewarded": false
+    },
+    {
+      "round": 3,
+      "accuracy": 20.0,
+      "score": 20,
+      "timestamp": 1745732063,
+      "rewarded": false
+    },
+    {
+      "round": 3,
+      "accuracy": 20.0,
+      "score": 20,
+      "timestamp": 1745732063,
+      "rewarded": false
+    },
+    {
+      "round": 1,
+      "accuracy": 0.0,
+      "score": 0,
+      "timestamp": 1745732288,
+      "rewarded": false
+    },
+    {
+      "round": 1,
+      "accuracy": 0.0,
+      "score": 0,
+      "timestamp": 1745732288,
+      "rewarded": false
+    },
+    {
+      "round": 2,
+      "accuracy": 0.0,
+      "score": 0,
+      "timestamp": 1745732290,
+      "rewarded": false
+    },
+    {
+      "round": 2,
+      "accuracy": 0.0,
+      "score": 0,
+      "timestamp": 1745732290,
+      "rewarded": false
+    },
+    {
+      "round": 3,
+      "accuracy": 0.0,
+      "score": 0,
+      "timestamp": 1745732293,
+      "rewarded": false
+    }
+  ]
+}

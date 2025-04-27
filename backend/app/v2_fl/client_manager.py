@@ -1,5 +1,7 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """
-Client management tool for federated learning with blockchain authentication.
+Client management tool for federated learning with ETH rewards.
 """
 
 import os
@@ -14,16 +16,16 @@ from datetime import datetime
 from blockchain_connector import BlockchainConnector
 
 def load_blockchain_connector(
-    ganache_url: str = "http:/192.168.1.146:7545",
+    ganache_url: str = "http://192.168.1.146:7545",
     contract_address: Optional[str] = None,
-    private_key: Optional[str] = None
+    private_key: Optional[str] = None,
 ) -> BlockchainConnector:
     """
     Load the blockchain connector.
     
     Args:
         ganache_url: Ganache blockchain URL
-        contract_address: Address of deployed EnhancedModelRegistry contract
+        contract_address: Address of deployed Federation contract
         private_key: Private key for blockchain transactions
         
     Returns:
@@ -45,7 +47,7 @@ def load_blockchain_connector(
         blockchain_connector = BlockchainConnector(
             ganache_url=ganache_url,
             contract_address=contract_address,
-            private_key=private_key
+            private_key=private_key,
         )
         print(f"Connected to blockchain at {ganache_url}")
         print(f"Contract address: {contract_address}")
@@ -102,7 +104,7 @@ def list_clients(blockchain_connector: BlockchainConnector, show_details: bool =
                     })
             
             # Print table
-            headers = ["Address", "Contributions", "Total Score", "Rewards Earned", "Claimed", "Last Contribution"]
+            headers = ["Address", "Contributions", "Total Score", "Rewards Earned (ETH)", "Claimed", "Last Contribution"]
             table_data = [[d["address"], d["contributions"], d["total_score"], d["rewards_earned"], 
                            "Yes" if d["rewards_claimed"] else "No", d["last_contribution"]] for d in client_details]
             
@@ -238,7 +240,7 @@ def show_client_contributions(blockchain_connector: BlockchainConnector, client_
         print(f"Client {client_address} contribution summary:")
         print(f"  Total contributions: {details['contribution_count']}")
         print(f"  Total score: {details['total_score']}")
-        print(f"  Rewards earned: {details['rewards_earned']}")
+        print(f"  Rewards earned: {details['rewards_earned']} ETH")
         print(f"  Rewards claimed: {'Yes' if details['rewards_claimed'] else 'No'}")
         
         if details["last_contribution_timestamp"] > 0:
@@ -311,17 +313,103 @@ def show_round_contributions(blockchain_connector: BlockchainConnector, round_nu
         table_data.sort(key=lambda x: x[2], reverse=True)
         
         print(tabulate(table_data, headers=headers, tablefmt="grid"))
+        
+        # Show reward pool information if available
+        try:
+            pool_info = blockchain_connector.get_round_reward_pool(round_num)
+            print("\nReward Pool Information:")
+            print(f"  Total Amount: {pool_info['total_amount']} ETH")
+            print(f"  Allocated Amount: {pool_info['allocated_amount']} ETH")
+            print(f"  Remaining Amount: {pool_info['remaining_amount']} ETH")
+            print(f"  Finalized: {'Yes' if pool_info['is_finalized'] else 'No'}")
+        except Exception as e:
+            print(f"\nError getting reward pool information: {e}")
+            
     except Exception as e:
         print(f"Error showing round contributions: {e}")
 
-def allocate_rewards(blockchain_connector: BlockchainConnector, round_num: int, total_reward: int) -> None:
+def fund_contract(blockchain_connector: BlockchainConnector, amount_eth: float) -> None:
     """
-    Allocate rewards for a specific round.
+    Fund the contract with ETH.
+    
+    Args:
+        blockchain_connector: Blockchain connector instance
+        amount_eth: Amount of ETH to send
+    """
+    try:
+        # Confirm funding
+        confirm = input(f"Are you sure you want to fund the contract with {amount_eth} ETH? [y/N]: ")
+        if confirm.lower() != 'y':
+            print("Funding cancelled")
+            return
+        
+        # Fund contract
+        tx_hash = blockchain_connector.fund_contract(amount_eth)
+        print(f"Contract funded with {amount_eth} ETH")
+        print(f"Transaction hash: {tx_hash}")
+    except Exception as e:
+        print(f"Error funding contract: {e}")
+
+def fund_round_reward_pool(blockchain_connector: BlockchainConnector, round_num: int, amount_eth: float) -> None:
+    """
+    Fund a specific round's reward pool.
     
     Args:
         blockchain_connector: Blockchain connector instance
         round_num: Round number
-        total_reward: Total reward amount to distribute
+        amount_eth: Amount of ETH to allocate
+    """
+    try:
+        # Confirm funding
+        confirm = input(f"Are you sure you want to fund round {round_num} with {amount_eth} ETH? [y/N]: ")
+        if confirm.lower() != 'y':
+            print("Funding cancelled")
+            return
+        
+        # Fund round
+        tx_hash = blockchain_connector.fund_round_reward_pool(round_num, amount_eth)
+        print(f"Round {round_num} funded with {amount_eth} ETH")
+        print(f"Transaction hash: {tx_hash}")
+    except Exception as e:
+        print(f"Error funding round: {e}")
+
+def finalize_round_reward_pool(blockchain_connector: BlockchainConnector, round_num: int) -> None:
+    """
+    Finalize a round's reward pool.
+    
+    Args:
+        blockchain_connector: Blockchain connector instance
+        round_num: Round number
+    """
+    try:
+        # Get reward pool information
+        pool_info = blockchain_connector.get_round_reward_pool(round_num)
+        
+        if pool_info["is_finalized"]:
+            print(f"Reward pool for round {round_num} is already finalized")
+            return
+        
+        # Confirm finalization
+        confirm = input(f"Are you sure you want to finalize the reward pool for round {round_num}? "
+                        f"(Current total: {pool_info['total_amount']} ETH) [y/N]: ")
+        if confirm.lower() != 'y':
+            print("Finalization cancelled")
+            return
+        
+        # Finalize round
+        tx_hash = blockchain_connector.finalize_round_reward_pool(round_num)
+        print(f"Reward pool for round {round_num} finalized")
+        print(f"Transaction hash: {tx_hash}")
+    except Exception as e:
+        print(f"Error finalizing round reward pool: {e}")
+
+def allocate_rewards(blockchain_connector: BlockchainConnector, round_num: int) -> None:
+    """
+    Allocate ETH rewards for a specific round.
+    
+    Args:
+        blockchain_connector: Blockchain connector instance
+        round_num: Round number
     """
     try:
         # Check if there are contributions for this round
@@ -331,24 +419,140 @@ def allocate_rewards(blockchain_connector: BlockchainConnector, round_num: int, 
             print(f"No contributions found for round {round_num}")
             return
         
+        # Get reward pool information
+        pool_info = blockchain_connector.get_round_reward_pool(round_num)
+        
+        if not pool_info["is_finalized"]:
+            print(f"Reward pool for round {round_num} is not finalized yet")
+            print("Please finalize the reward pool first with the 'finalize-pool' command")
+            return
+        
         # Check if rewards are already allocated
         if all(contrib["rewarded"] for contrib in contributions):
             print(f"Rewards for round {round_num} are already allocated")
             return
         
+        # Show reward pool and contributions
+        print(f"Round {round_num} Reward Pool: {pool_info['total_amount']} ETH")
+        print(f"Number of contributions: {len(contributions)}")
+        
+        # Calculate estimated reward distribution
+        total_score = sum(contrib["score"] for contrib in contributions if not contrib["rewarded"])
+        
+        if total_score == 0:
+            print("No unrewarded contributions with non-zero scores found")
+            return
+        
+        print("\nEstimated reward distribution:")
+        headers = ["Client Address", "Score", "Percentage", "Estimated ETH"]
+        table_data = []
+        
+        for contrib in contributions:
+            if not contrib["rewarded"] and contrib["score"] > 0:
+                percentage = (contrib["score"] / total_score) * 100
+                estimated_eth = (contrib["score"] / total_score) * float(pool_info['remaining_amount'])
+                table_data.append([
+                    contrib["client_address"],
+                    contrib["score"],
+                    f"{percentage:.2f}%",
+                    f"{estimated_eth:.6f}"
+                ])
+        
+        # Sort by score (descending)
+        table_data.sort(key=lambda x: x[1], reverse=True)
+        
+        print(tabulate(table_data, headers=headers, tablefmt="grid"))
+        
         # Confirm allocation
-        print(f"About to allocate {total_reward} reward points among {len(contributions)} clients for round {round_num}")
-        confirm = input("Are you sure you want to continue? [y/N]: ")
+        confirm = input(f"Are you sure you want to allocate rewards for round {round_num}? [y/N]: ")
         if confirm.lower() != 'y':
             print("Reward allocation cancelled")
             return
         
         # Allocate rewards
-        tx_hash = blockchain_connector.allocate_rewards_for_round(round_num, total_reward)
+        tx_hash = blockchain_connector.allocate_rewards_for_round(round_num)
         print(f"Rewards allocated successfully for round {round_num}")
         print(f"Transaction hash: {tx_hash}")
     except Exception as e:
         print(f"Error allocating rewards: {e}")
+
+def record_mock_contribution(
+    blockchain_connector: BlockchainConnector, 
+    client_address: str, 
+    round_num: int, 
+    accuracy: float
+) -> None:
+    """
+    Record a mock contribution for testing.
+    
+    Args:
+        blockchain_connector: Blockchain connector instance
+        client_address: Client address
+        round_num: Round number
+        accuracy: Contribution accuracy (percentage)
+    """
+    try:
+        # Check if client is authorized
+        if not blockchain_connector.is_client_authorized(client_address):
+            print(f"Client {client_address} is not authorized")
+            return
+        
+        # Generate mock IPFS hash
+        import uuid
+        mock_ipfs_hash = f"Qm{uuid.uuid4().hex[:34]}"
+        
+        # Record contribution
+        tx_hash, score = blockchain_connector.record_contribution(
+            client_address=client_address,
+            round_num=round_num,
+            ipfs_hash=mock_ipfs_hash,
+            accuracy=accuracy
+        )
+        
+        print(f"Recorded mock contribution for client {client_address}")
+        print(f"  Round: {round_num}")
+        print(f"  Accuracy: {accuracy:.2f}%")
+        print(f"  Score: {score}")
+        print(f"  IPFS hash: {mock_ipfs_hash}")
+        print(f"  Transaction hash: {tx_hash}")
+    except Exception as e:
+        print(f"Error recording mock contribution: {e}")
+
+def register_mock_model(
+    blockchain_connector: BlockchainConnector,
+    round_num: int,
+    version: str,
+    participating_clients: int
+) -> None:
+    """
+    Register a mock model for testing.
+    
+    Args:
+        blockchain_connector: Blockchain connector instance
+        round_num: Round number
+        version: Version string
+        participating_clients: Number of participating clients
+    """
+    try:
+        # Generate mock IPFS hash
+        import uuid
+        mock_ipfs_hash = f"Qm{uuid.uuid4().hex[:34]}"
+        
+        # Register model
+        tx_hash = blockchain_connector.register_model(
+            ipfs_hash=mock_ipfs_hash,
+            round_num=round_num,
+            version=version,
+            participating_clients=participating_clients
+        )
+        
+        print(f"Registered mock model for round {round_num}")
+        print(f"  Version: {version}")
+        print(f"  Participating clients: {participating_clients}")
+        print(f"  IPFS hash: {mock_ipfs_hash}")
+        print(f"  Transaction hash: {tx_hash}")
+    except Exception as e:
+        print(f"Error registering mock model: {e}")
 
 def export_client_stats(blockchain_connector: BlockchainConnector, filepath: str) -> None:
     """
@@ -394,11 +598,11 @@ def export_client_stats(blockchain_connector: BlockchainConnector, filepath: str
         print(f"Error exporting client stats: {e}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Client management tool for federated learning with blockchain")
+    parser = argparse.ArgumentParser(description="Client management tool for federated learning with ETH rewards")
     
     # Blockchain connection
     parser.add_argument("--ganache-url", type=str, default="http://192.168.1.146:7545", help="Ganache blockchain URL")
-    parser.add_argument("--contract-address", type=str, help="EnhancedModelRegistry contract address")
+    parser.add_argument("--contract-address", type=str, help="Federation contract address")
     parser.add_argument("--private-key", type=str, help="Private key for blockchain transactions")
     
     # Actions
@@ -428,10 +632,34 @@ def main():
     round_contrib_parser = subparsers.add_parser("round-contributions", help="Show all contributions for a specific round")
     round_contrib_parser.add_argument("round_num", type=int, help="Round number")
     
+    # Fund contract
+    fund_contract_parser = subparsers.add_parser("fund-contract", help="Fund the contract with ETH")
+    fund_contract_parser.add_argument("amount_eth", type=float, help="Amount of ETH to send")
+    
+    # Fund round reward pool
+    fund_round_parser = subparsers.add_parser("fund-round", help="Fund a specific round's reward pool")
+    fund_round_parser.add_argument("round_num", type=int, help="Round number")
+    fund_round_parser.add_argument("amount_eth", type=float, help="Amount of ETH to allocate")
+    
+    # Finalize round reward pool
+    finalize_pool_parser = subparsers.add_parser("finalize-pool", help="Finalize a round's reward pool")
+    finalize_pool_parser.add_argument("round_num", type=int, help="Round number")
+    
     # Allocate rewards
     reward_parser = subparsers.add_parser("allocate-rewards", help="Allocate rewards for a specific round")
     reward_parser.add_argument("round_num", type=int, help="Round number")
-    reward_parser.add_argument("--total-reward", type=int, default=1000, help="Total reward amount to distribute")
+    
+    # Record mock contribution
+    mock_contrib_parser = subparsers.add_parser("record-mock", help="Record a mock contribution for testing")
+    mock_contrib_parser.add_argument("client_address", type=str, help="Ethereum address of the client")
+    mock_contrib_parser.add_argument("round_num", type=int, help="Round number")
+    mock_contrib_parser.add_argument("accuracy", type=float, help="Contribution accuracy (percentage)")
+    
+    # Register mock model
+    mock_model_parser = subparsers.add_parser("register-model", help="Register a mock model for testing")
+    mock_model_parser.add_argument("round_num", type=int, help="Round number")
+    mock_model_parser.add_argument("version", type=str, help="Version string (e.g., '1.0.3')")
+    mock_model_parser.add_argument("participating_clients", type=int, help="Number of participating clients")
     
     # Export client stats
     export_parser = subparsers.add_parser("export", help="Export client statistics to a file")
@@ -447,7 +675,7 @@ def main():
     blockchain_connector = load_blockchain_connector(
         ganache_url=args.ganache_url,
         contract_address=args.contract_address,
-        private_key=args.private_key
+        private_key=args.private_key,
     )
     
     # Perform the selected action
@@ -463,8 +691,18 @@ def main():
         show_client_contributions(blockchain_connector, args.client_address)
     elif args.action == "round-contributions":
         show_round_contributions(blockchain_connector, args.round_num)
+    elif args.action == "fund-contract":
+        fund_contract(blockchain_connector, args.amount_eth)
+    elif args.action == "fund-round":
+        fund_round_reward_pool(blockchain_connector, args.round_num, args.amount_eth)
+    elif args.action == "finalize-pool":
+        finalize_round_reward_pool(blockchain_connector, args.round_num)
     elif args.action == "allocate-rewards":
-        allocate_rewards(blockchain_connector, args.round_num, args.total_reward)
+        allocate_rewards(blockchain_connector, args.round_num)
+    elif args.action == "record-mock":
+        record_mock_contribution(blockchain_connector, args.client_address, args.round_num, args.accuracy)
+    elif args.action == "register-model":
+        register_mock_model(blockchain_connector, args.round_num, args.version, args.participating_clients)
     elif args.action == "export":
         export_client_stats(blockchain_connector, args.filepath)
 

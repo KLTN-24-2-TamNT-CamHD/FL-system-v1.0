@@ -1,0 +1,25 @@
+{
+  "timestamp": "2025-04-24_21-09-06",
+  "num_rounds": 3,
+  "min_fit_clients": 1,
+  "min_evaluate_clients": 1,
+  "authorized_clients_only": false,
+  "version_prefix": "1.0",
+  "contract_address": "0xDCE0129848310Cd307d8Dda4B8CaFCdc5F9c6Bde",
+  "final_metrics": {
+    "round": 3,
+    "eval_loss": 7.014799118041992,
+    "eval_metrics": {
+      "ensemble_size": 4.0,
+      "accuracy": 10.0,
+      "loss": 7.014799118041992,
+      "num_clients": 1,
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 10.0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-04-24T14:09:18.011781+00:00"
+  }
+}

@@ -224,22 +224,53 @@ class EnsembleAggregator:
             else:
                 normalized_weights = [1.0/len(valid_dicts)] * len(valid_dicts)
             
-            # Check if all have the same shape
-            shapes = [np.array(p).shape for p in valid_dicts]
-            if len(set(shapes)) != 1:
-                logger.warning(f"Skipping parameter {key} due to shape mismatch: {shapes}")
+            # Handle the "estimator" key specially - it's a string and shouldn't be averaged
+            if key == "estimator":
+                # Just use the value from the first state dict
+                aggregated[key] = valid_dicts[0]
                 continue
-            
-            # Aggregate parameter
-            shape = shapes[0]
-            aggregated_param = np.zeros(shape)
-            
-            for i, param in enumerate(valid_dicts):
-                param_array = np.array(param)
-                aggregated_param += param_array * normalized_weights[i]
-            
-            # Convert back to list
-            aggregated[key] = aggregated_param.tolist()
+                
+            # Check if all have the same shape
+            try:
+                # Try to convert all parameters to float arrays
+                param_arrays = []
+                for param in valid_dicts:
+                    # Handle potential nested lists (e.g., for coef matrices)
+                    if isinstance(param, list) and all(isinstance(item, list) for item in param):
+                        # For nested lists, convert each inner list to float
+                        param_array = np.array([
+                            [float(x) if isinstance(x, (int, float, str)) else x for x in inner]
+                            for inner in param
+                        ], dtype=np.float64)
+                    else:
+                        # For flat lists, convert directly to float
+                        param_array = np.array([
+                            float(x) if isinstance(x, (int, float, str)) else x for x in param
+                        ], dtype=np.float64)
+                    param_arrays.append(param_array)
+                
+                # Check shapes after conversion
+                shapes = [arr.shape for arr in param_arrays]
+                if len(set(shapes)) != 1:
+                    logger.warning(f"Skipping parameter {key} due to shape mismatch: {shapes}")
+                    continue
+                
+                # Aggregate parameter
+                shape = shapes[0]
+                aggregated_param = np.zeros(shape, dtype=np.float64)
+                
+                for i, param_array in enumerate(param_arrays):
+                    aggregated_param += param_array * normalized_weights[i]
+                
+                # Convert back to list
+                aggregated[key] = aggregated_param.tolist()
+                
+            except (ValueError, TypeError) as e:
+                # If we can't convert to float arrays, this might be a non-numeric parameter
+                logger.warning(f"Cannot aggregate parameter {key} numerically: {e}")
+                # Use the parameter from the client with the highest weight
+                max_weight_idx = normalized_weights.index(max(normalized_weights))
+                aggregated[key] = valid_dicts[max_weight_idx]
         
         return aggregated
     

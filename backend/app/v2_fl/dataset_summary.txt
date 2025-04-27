@@ -1,0 +1,26 @@
+Diabetes Dataset - Stratified Split
+Total samples: 442
+Features: age, sex, bmi, bp, s1, s2, s3, s4, s5, s6
+
+Client Summaries:
+
+client-1:
+  - Split type: stratified
+  - Target range: 31.0000 to 293.0000
+  - Train samples: 99
+  - Test samples: 25
+  - Progression distribution: {0: 27, 1: 27, 2: 25, 3: 8, 4: 8, 5: 9, 6: 8, 7: 4, 8: 4, 9: 4}
+
+client-2:
+  - Split type: stratified
+  - Target range: 25.0000 to 341.0000
+  - Train samples: 144
+  - Test samples: 36
+  - Progression distribution: {0: 13, 1: 13, 2: 12, 3: 26, 4: 25, 5: 27, 6: 25, 7: 13, 8: 13, 9: 13}
+
+client-3:
+  - Split type: stratified
+  - Target range: 39.0000 to 346.0000
+  - Train samples: 110
+  - Test samples: 28
+  - Progression distribution: {0: 6, 1: 5, 2: 6, 3: 10, 4: 10, 5: 10, 6: 9, 7: 28, 8: 27, 9: 27}

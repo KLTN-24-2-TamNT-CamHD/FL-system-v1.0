@@ -13,6 +13,13 @@ from pathlib import Path
 from datetime import datetime, timezone
 from sklearn.model_selection import train_test_split
 
+
+import random
+import threading
+from web3.exceptions import TransactionNotFound
+from hexbytes import HexBytes
+import pandas as pd
+
 import flwr as fl
 import torch
 import torch.nn as nn
@@ -895,7 +902,6 @@ class GAStackingClient(fl.client.NumPyClient):
         for model in self.base_models:
             if hasattr(model, 'to'):
                 model.to(self.device)
-
     
     def evaluate(
         self, parameters: Parameters, config: Dict[str, Scalar]
@@ -1101,37 +1107,62 @@ def start_client(
             logger.error(f"Failed to initialize blockchain connector: {e}")
             logger.warning("Continuing without blockchain features")
     
-    # Create synthetic data for demonstration
-    # In a real application, you would load your actual dataset
-    def generate_synthetic_data(num_samples=100):
-        x = torch.randn(num_samples, input_dim)
-        w = torch.randn(input_dim, output_dim)
-        b = torch.randn(output_dim)
-        y = torch.matmul(x, w) + b + 0.1 * torch.randn(num_samples, output_dim)
-        return x, y
-    
-    # Generate data
-    train_x, train_y = generate_synthetic_data(100)
-    test_x, test_y = generate_synthetic_data(20)
-    
-    # Create data loaders
-    class SimpleDataset(torch.utils.data.Dataset):
-        def __init__(self, x, y):
-            self.x = x
-            self.y = y
+    # Load dataset from files
+    def load_dataset_from_files(train_file, test_file):
+        # Read train and test files
+        train_df = pd.read_csv(train_file, comment='#')
+        test_df = pd.read_csv(test_file, comment='#')
         
-        def __len__(self):
-            return len(self.x)
+        # Extract features and targets
+        feature_columns = [col for col in train_df.columns if col != 'target']
         
-        def __getitem__(self, idx):
-            return self.x[idx], self.y[idx]
-    
-    train_loader = DataLoader(
-        SimpleDataset(train_x, train_y), batch_size=10, shuffle=True
-    )
-    test_loader = DataLoader(
-        SimpleDataset(test_x, test_y), batch_size=10, shuffle=False
-    )
+        # Convert to tensors
+        train_x = torch.tensor(train_df[feature_columns].values, dtype=torch.float32)
+        train_y = torch.tensor(train_df['target'].values.reshape(-1, 1), dtype=torch.float32)
+        
+        test_x = torch.tensor(test_df[feature_columns].values, dtype=torch.float32)
+        test_y = torch.tensor(test_df['target'].values.reshape(-1, 1), dtype=torch.float32)
+        
+        # Update input and output dimensions based on the data
+        nonlocal input_dim, output_dim
+        input_dim = train_x.shape[1]
+        output_dim = train_y.shape[1]
+        
+        logger.info(f"Dataset loaded - Input dim: {input_dim}, Output dim: {output_dim}")
+        
+        # Create data loaders
+        class SimpleDataset(torch.utils.data.Dataset):
+            def __init__(self, x, y):
+                self.x = x
+                self.y = y
+            
+            def __len__(self):
+                return len(self.x)
+            
+            def __getitem__(self, idx):
+                return self.x[idx], self.y[idx]
+        
+        train_loader = DataLoader(
+            SimpleDataset(train_x, train_y), batch_size=32, shuffle=True
+        )
+        test_loader = DataLoader(
+            SimpleDataset(test_x, test_y), batch_size=32, shuffle=False
+        )
+        
+        return train_loader, test_loader
+
+    # Determine which dataset files to load based on client_id
+    train_file = f"{client_id}_train.txt"
+    test_file = f"{client_id}_test.txt"
+
+    # Check if files exist
+    if not os.path.exists(train_file) or not os.path.exists(test_file):
+        logger.warning(f"Dataset files not found for {client_id}, using default files")
+        train_file = "client-1_train.txt"  # Fallback to client-1 if files not found
+        test_file = "client-1_test.txt"
+
+    # Load dataset
+    train_loader, test_loader = load_dataset_from_files(train_file, test_file)
     
     # Create client
     client = GAStackingClient(
@@ -1176,7 +1207,8 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"], help="Device for training")
     parser.add_argument("--ga-generations", type=int, default=20, help="Number of GA generations to run")
     parser.add_argument("--ga-population-size", type=int, default=30, help="Size of GA population")
-    
+    parser.add_argument("--train-file", type=str, help="Path to training data file")
+    parser.add_argument("--test-file", type=str, help="Path to test data file")
     args = parser.parse_args()
     
     # Check if contract address is stored in file
@@ -1187,6 +1219,11 @@ if __name__ == "__main__":
                 print(f"Loaded contract address from file: {args.contract_address}")
         except FileNotFoundError:
             print("No contract address provided or found in file")
+    
+    # Override train/test files if provided
+    if args.train_file and args.test_file:
+        train_file = args.train_file
+        test_file = args.test_file
     
     start_client(
         server_address=args.server_address,
@@ -1202,4 +1239,5 @@ if __name__ == "__main__":
         device=args.device,
         ga_generations=args.ga_generations,
         ga_population_size=args.ga_population_size
+        
     )

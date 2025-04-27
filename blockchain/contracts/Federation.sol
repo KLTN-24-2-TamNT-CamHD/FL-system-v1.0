@@ -34,6 +34,13 @@ contract Federation {
         bool rewarded;
     }
     
+    // Round reward pool structure
+    struct RoundRewardPool {
+        uint256 totalAmount;
+        uint256 allocatedAmount;
+        bool isFinalized;
+    }
+    
     // Main storage for models
     mapping(bytes32 => Model) public models;
     
@@ -55,8 +62,17 @@ contract Federation {
     // Contributions by round
     mapping(uint256 => ContributionRecord[]) public roundContributions;
     
+    // Reward pools by round
+    mapping(uint256 => RoundRewardPool) public roundRewardPools;
+    
     // Total rewards allocated
     uint256 public totalRewardsAllocated;
+    
+    // Total rewards claimed
+    uint256 public totalRewardsClaimed;
+    
+    // Current contract balance
+    uint256 public contractBalance;
     
     // Events
     event ModelRegistered(bytes32 indexed modelId, string ipfsHash, uint256 round, string version);
@@ -65,20 +81,65 @@ contract Federation {
     event ClientAuthorized(address indexed clientAddress);
     event ClientDeauthorized(address indexed clientAddress);
     event ContributionRecorded(address indexed clientAddress, uint256 round, uint256 score);
-    event RewardAllocated(address indexed clientAddress, uint256 amount);
+    event RewardAllocated(address indexed clientAddress, uint256 amount, uint256 round);
     event RewardClaimed(address indexed clientAddress, uint256 amount);
+    event RewardPoolFunded(uint256 indexed round, uint256 amount);
+    event RewardPoolFinalized(uint256 indexed round, uint256 totalAmount);
+    event ContractFunded(address indexed from, uint256 amount);
+    event EmergencyWithdrawal(address indexed to, uint256 amount);
     
     // Owner of the contract
     address public owner;
     
     constructor() {
         owner = msg.sender;
+        contractBalance = 0;
     }
     
     // Modifier to restrict certain functions to the owner
     modifier onlyOwner() {
         require(msg.sender == owner, "Only the owner can call this function");
         _;
+    }
+    
+    // Receive function to allow the contract to receive ETH
+    receive() external payable {
+        contractBalance += msg.value;
+        emit ContractFunded(msg.sender, msg.value);
+    }
+    
+    // Fallback function
+    fallback() external payable {
+        contractBalance += msg.value;
+        emit ContractFunded(msg.sender, msg.value);
+    }
+    
+    // Function to fund the contract
+    function fundContract() external payable {
+        contractBalance += msg.value;
+        emit ContractFunded(msg.sender, msg.value);
+    }
+    
+    // Function to fund a specific round's reward pool
+    function fundRoundRewardPool(uint256 round) external payable onlyOwner {
+        require(msg.value > 0, "Funding amount must be greater than zero");
+        
+        RoundRewardPool storage pool = roundRewardPools[round];
+        pool.totalAmount += msg.value;
+        contractBalance += msg.value;
+        
+        emit RewardPoolFunded(round, msg.value);
+    }
+    
+    // Finalize a round's reward pool (prevents additional funding)
+    function finalizeRoundRewardPool(uint256 round) external onlyOwner {
+        RoundRewardPool storage pool = roundRewardPools[round];
+        require(pool.totalAmount > 0, "Reward pool is empty");
+        require(!pool.isFinalized, "Reward pool is already finalized");
+        
+        pool.isFinalized = true;
+        
+        emit RewardPoolFinalized(round, pool.totalAmount);
     }
     
     // Generate a unique model ID from the IPFS hash and round
@@ -320,7 +381,7 @@ contract Federation {
     }
     
     //////////////////////////////////////////////////////////
-    ///////////   MODEL MANAGEMENT FUNCTIONS  ////////////////
+    ///////////   CLIENT MANAGEMENT FUNCTIONS  ////////////////
     //////////////////////////////////////////////////////////
     // Authorize a client to participate in federated learning
     function authorizeClient(address clientAddress) public onlyOwner {
@@ -373,7 +434,105 @@ contract Federation {
         return authorizedClients;
     }
     
-    // Record a client's contribution
+    //////////////////////////////////////////////////////////
+    ///////////   REWARD MANAGEMENT FUNCTIONS  ///////////////
+    //////////////////////////////////////////////////////////
+    
+    // Allocate rewards to clients based on their contributions for a round
+    function allocateRewardsForRound(uint256 round) public onlyOwner {
+        ContributionRecord[] storage contributions = roundContributions[round];
+        require(contributions.length > 0, "No contributions for this round");
+        
+        RoundRewardPool storage pool = roundRewardPools[round];
+        require(pool.totalAmount > 0, "No rewards available for this round");
+        require(pool.isFinalized, "Reward pool must be finalized before allocation");
+        
+        // Calculate total score
+        uint256 totalScore = 0;
+        for (uint i = 0; i < contributions.length; i++) {
+            if (!contributions[i].rewarded) {
+                totalScore += contributions[i].score;
+            }
+        }
+        
+        require(totalScore > 0, "Total score is zero");
+        
+        uint256 availableRewards = pool.totalAmount - pool.allocatedAmount;
+        require(availableRewards > 0, "All rewards for this round have been allocated");
+        
+        // Allocate and transfer rewards in one step
+        for (uint i = 0; i < contributions.length; i++) {
+            if (!contributions[i].rewarded) {
+                ContributionRecord storage contribution = contributions[i];
+                
+                // Calculate reward amount
+                uint256 rewardAmount = (contribution.score * availableRewards) / totalScore;
+                
+                // Update contribution record
+                contribution.rewarded = true;
+                
+                // Update reward pool
+                pool.allocatedAmount += rewardAmount;
+                contractBalance -= rewardAmount;
+                
+                // Transfer ETH directly to the client
+                (bool success, ) = payable(contribution.clientAddress).call{value: rewardAmount}("");
+                require(success, "Transfer failed");
+                
+                emit RewardAllocated(contribution.clientAddress, rewardAmount, round);
+            }
+        }
+    }
+    
+    // Allow client to claim rewards (transfers actual ETH)
+    function claimRewards() public {
+        ClientContribution storage client = clientRegistry[msg.sender];
+        require(client.isAuthorized, "Client is not authorized");
+        require(client.rewardsEarned > 0, "No rewards to claim");
+        require(!client.rewardsClaimed, "Rewards already claimed");
+        
+        uint256 amount = client.rewardsEarned;
+        require(amount <= contractBalance, "Insufficient contract balance");
+        
+        // Mark rewards as claimed before transfer to prevent reentrancy
+        client.rewardsClaimed = true;
+        contractBalance -= amount;
+        totalRewardsClaimed += amount;
+        
+        // Transfer ETH to the client
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Transfer failed");
+        
+        emit RewardClaimed(msg.sender, amount);
+    }
+    
+    // Get available rewards for a client
+    function getAvailableRewards(address clientAddress) public view returns (uint256) {
+        ClientContribution storage client = clientRegistry[clientAddress];
+        if (!client.isAuthorized || client.rewardsClaimed) {
+            return 0;
+        }
+        return client.rewardsEarned;
+    }
+    
+    // Emergency withdrawal function for the owner
+    function emergencyWithdraw(uint256 amount) public onlyOwner {
+        require(amount <= contractBalance, "Insufficient contract balance");
+        
+        contractBalance -= amount;
+        
+        // Transfer ETH to the owner
+        (bool success, ) = payable(owner).call{value: amount}("");
+        require(success, "Transfer failed");
+        
+        emit EmergencyWithdrawal(owner, amount);
+    }
+    
+
+    //////////////////////////////////////////////////////////
+    ////////  CONTRIBUTION MANAGEMENT FUNCTIONS  /////////////
+    //////////////////////////////////////////////////////////
+        // Record a client's contribution
     function recordContribution(
         address clientAddress,
         uint256 round,
@@ -417,59 +576,7 @@ contract Federation {
         
         return score;
     }
-    
-    // Allocate rewards to clients based on their contributions for a round
-    function allocateRewardsForRound(uint256 round, uint256 totalReward) public onlyOwner {
-        ContributionRecord[] storage contributions = roundContributions[round];
-        require(contributions.length > 0, "No contributions for this round");
-        
-        // Calculate total score for this round
-        uint256 totalScore = 0;
-        for (uint i = 0; i < contributions.length; i++) {
-            totalScore += contributions[i].score;
-        }
-        
-        require(totalScore > 0, "Total score is zero");
-        
-        // Allocate rewards proportionally to each client's score
-        for (uint i = 0; i < contributions.length; i++) {
-            if (!contributions[i].rewarded) {
-                ContributionRecord storage contribution = contributions[i];
-                
-                // Calculate reward amount
-                uint256 rewardAmount = (contribution.score * totalReward) / totalScore;
-                
-                // Update contribution record
-                contribution.rewarded = true;
-                
-                // Update client's rewards
-                ClientContribution storage client = clientRegistry[contribution.clientAddress];
-                client.rewardsEarned += rewardAmount;
-                
-                // Update total rewards allocated
-                totalRewardsAllocated += rewardAmount;
-                
-                emit RewardAllocated(contribution.clientAddress, rewardAmount);
-            }
-        }
-    }
-    
-    // Allow client to claim rewards (in a real implementation, this would transfer tokens)
-    function claimRewards() public {
-        ClientContribution storage client = clientRegistry[msg.sender];
-        require(client.isAuthorized, "Client is not authorized");
-        require(client.rewardsEarned > 0, "No rewards to claim");
-        require(!client.rewardsClaimed, "Rewards already claimed");
-        
-        uint256 amount = client.rewardsEarned;
-        client.rewardsClaimed = true;
-        
-        // In a real implementation, this would transfer tokens
-        // For now, we just mark it as claimed
-        
-        emit RewardClaimed(msg.sender, amount);
-    }
-    
+
     // Get client contribution details
     function getClientContribution(address clientAddress) public view returns (
         uint256 contributionCount,
@@ -541,6 +648,22 @@ contract Federation {
         }
         
         return (clients, accuracies, scores, rewarded);
+    }
+    
+    // Get round reward pool details
+    function getRoundRewardPool(uint256 round) public view returns (
+        uint256 totalAmount,
+        uint256 allocatedAmount,
+        uint256 remainingAmount,
+        bool isFinalized
+    ) {
+        RoundRewardPool storage pool = roundRewardPools[round];
+        return (
+            pool.totalAmount,
+            pool.allocatedAmount,
+            pool.totalAmount - pool.allocatedAmount,
+            pool.isFinalized
+        );
     }
     
     // Update contract owner

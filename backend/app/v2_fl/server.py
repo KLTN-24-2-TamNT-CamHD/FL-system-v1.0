@@ -135,66 +135,66 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
         return f"{self.version_prefix}.{round_num}"
 
     def initialize_parameters(
-            self, client_manager: fl.server.client_manager.ClientManager
-        ) -> Optional[Parameters]:
-            """Initialize global model parameters."""
-            
-            # Define the correct dimensions
-            input_dim = 10  # Feature dimension
-            output_dim = 1  # Output dimension
-            num_base_models = 3  # Number of base models
-            
-            # Define initial model ensemble configuration with correct dimensions
-            initial_ensemble_config = [
-                {
-                    "estimator": "lr",
-                    "input_dim": input_dim,
-                    "output_dim": output_dim,
-                    "coef": [[0.0] * input_dim],  # Initialize with zeros
-                    "intercept": [0.0]
-                },
-                {
-                    "estimator": "svc",
-                    "input_dim": input_dim,
-                    "output_dim": output_dim,
-                    "dual_coef": [[0.4321, -0.4321]],
-                    "support_vectors": [
-                        [0.0] * input_dim,
-                        [0.0] * input_dim
-                    ],
-                    "intercept": [0.5000]
-                },
-                {
-                    "estimator": "rf",
-                    "input_dim": input_dim,
-                    "output_dim": output_dim,
-                    "n_estimators": 100,
-                    "feature_importances": [1.0/input_dim] * input_dim
-                },
-                {
-                    "estimator": "meta_lr",
-                    "input_dim": num_base_models,
-                    "meta_input_dim": num_base_models,
-                    "output_dim": output_dim,
-                    "coef": [[1.0/num_base_models] * num_base_models],
-                    "intercept": [0.0]
-                }
-            ]
-            
-            # Create ensemble state with initial configuration
-            ensemble_state = {
-                "model_parameters": initial_ensemble_config,
-                "weights": [0.25, 0.25, 0.25, 0.25],  # Equal initial weights
-                "model_names": ["lr", "svc", "rf", "meta_lr"]
+        self, client_manager: fl.server.client_manager.ClientManager
+    ) -> Optional[Parameters]:
+        """Initialize global model parameters."""
+        
+        # Define the correct dimensions based on your configuration
+        input_dim = 10  # Feature dimension (based on support vectors in your JSON)
+        output_dim = 1  # Output dimension
+        num_base_models = 3  # Number of base models
+        
+        # Define initial model ensemble configuration matching your JSON
+        initial_ensemble_config = [
+            {
+                "estimator": "lr",
+                "input_dim": input_dim,
+                "output_dim": output_dim,
+                "coef": [[0.1245, -0.3487, 0.5632, 0.7819]],  # Your specific values
+                "intercept": [0.0102]
+            },
+            {
+                "estimator": "svc",
+                "input_dim": input_dim,
+                "output_dim": output_dim,
+                "dual_coef": [[0.4321, -0.4321]],
+                "support_vectors": [
+                    [5.1, 3.5, 1.4, 0.2],
+                    [6.2, 3.4, 5.4, 2.3]
+                ],
+                "intercept": [0.5000]
+            },
+            {
+                "estimator": "rf",
+                "input_dim": input_dim,
+                "output_dim": output_dim,
+                "n_estimators": 100,
+                "feature_importances": [0.12, 0.05, 0.68, 0.15]
+            },
+            {
+                "estimator": "meta_lr",
+                "input_dim": num_base_models,
+                "meta_input_dim": num_base_models,
+                "output_dim": output_dim,
+                "coef": [[0.33, 0.33, 0.34]],  # Adjusted to match 3 base models
+                "intercept": [-0.8200]
             }
-            
-            # Serialize ensemble state
-            ensemble_bytes = json.dumps(ensemble_state).encode('utf-8')
-            parameters = ndarrays_to_parameters([np.frombuffer(ensemble_bytes, dtype=np.uint8)])
-            
-            logger.info(f"Initialized server with custom ensemble configuration: input_dim={input_dim}, meta_input_dim={num_base_models}")
-            
-            return parameters
+        ]
+        
+        # Create ensemble state with initial configuration
+        ensemble_state = {
+            "model_parameters": initial_ensemble_config,
+            "weights": [0.33, 0.33, 0.34, 0.0],  # Initial weights prioritizing base models
+            "model_names": ["lr", "svc", "rf", "meta_lr"]
+        }
+        
+        # Serialize ensemble state
+        ensemble_bytes = json.dumps(ensemble_state).encode('utf-8')
+        parameters = ndarrays_to_parameters([np.frombuffer(ensemble_bytes, dtype=np.uint8)])
+        
+        logger.info(f"Initialized server with custom ensemble configuration: input_dim={input_dim}, meta_input_dim={num_base_models}")
+        
+        return parameters
 
     def configure_fit(
         self, server_round: int, parameters: Parameters, client_manager: fl.server.client_manager.ClientManager
@@ -834,9 +834,9 @@ def start_server(
         device=device
     )
     
+    
     # Create metrics directory with timestamp to keep each training run separate
     vn_timezone = pytz.timezone('Asia/Ho_Chi_Minh')
-
     local_time = datetime.now(vn_timezone)
     timestamp = local_time.strftime("%Y-%m-%d_%H-%M-%S")
     metrics_dir = Path(f"metrics/run_{timestamp}")

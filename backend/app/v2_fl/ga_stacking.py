@@ -159,7 +159,7 @@ class GAStacking:
             accuracy = correct / total if total > 0 else 0
             
             # For regression, we want to minimize loss, so we return negative loss
-            return -avg_loss
+            return 1 / avg_loss
     
     def select_parents(
         self, population: List[np.ndarray], fitness_scores: List[float]
