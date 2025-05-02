@@ -1,0 +1,31 @@
+/* Add to src/pages/Clients.css */
+.client-address {
+  font-family: 'Courier New', monospace;
+  background-color: #f5f5f5;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.clients-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.clients-table th,
+.clients-table td {
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.clients-table th {
+  background-color: var(--primary-light);
+  color: white;
+  font-weight: 500;
+}
+
+.clients-table tr:hover {
+  background-color: #f9f9f9;
+}

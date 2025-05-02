@@ -1,0 +1,10 @@
+{
+  "timestamp": "2025-05-01_11-17-54",
+  "num_rounds": 3,
+  "min_fit_clients": 2,
+  "min_evaluate_clients": 2,
+  "authorized_clients_only": true,
+  "version_prefix": "1.0",
+  "contract_address": null,
+  "final_metrics": null
+}

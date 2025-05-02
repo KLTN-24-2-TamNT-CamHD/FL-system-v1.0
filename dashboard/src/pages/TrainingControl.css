@@ -1,0 +1,204 @@
+/* src/pages/TrainingControl.css */
+.training-control h1 {
+  margin-bottom: 30px;
+}
+
+.form-container {
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+  padding: 30px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 25px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: var(--primary-dark);
+  font-size: 14px;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid #e1e1e1;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: all 0.3s;
+  background-color: #f9f9f9;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(63, 81, 181, 0.15);
+  outline: none;
+  background-color: white;
+}
+
+.form-group.checkbox {
+  display: flex;
+  align-items: center;
+}
+
+.form-group.checkbox input {
+  width: auto;
+  margin-right: 10px;
+}
+
+.form-divider {
+  grid-column: 1 / -1;
+  border-top: 1px solid #eee;
+  margin: 10px 0 20px;
+}
+
+.toggle-advanced-btn {
+  background-color: transparent;
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  padding: 10px 15px;
+  margin-bottom: 20px;
+  border-radius: 6px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  grid-column: 1 / -1;
+  max-width: 250px;
+  margin: 0 auto 20px;
+}
+
+.toggle-advanced-btn:hover {
+  background-color: rgba(63, 81, 181, 0.05);
+}
+
+.toggle-advanced-btn i {
+  margin-right: 8px;
+}
+
+.advanced-settings {
+  grid-column: 1 / -1;
+  background-color: #f9fafb;
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 10px;
+  border: 1px solid #eee;
+}
+
+.section-title {
+  grid-column: 1 / -1;
+  margin-bottom: 15px;
+  color: var(--primary-color);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.authorized-clients {
+  margin-top: 15px;
+  grid-column: 1 / -1;
+}
+
+.client-input {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.client-input input {
+  flex: 1;
+  margin-right: 10px;
+}
+
+.remove-btn {
+  background-color: var(--error-color);
+  color: white;
+  padding: 8px 15px;
+  border-radius: 6px;
+}
+
+.add-btn {
+  background-color: var(--info-color);
+  color: white;
+  margin-top: 10px;
+  padding: 10px 15px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 150px;
+}
+
+.add-btn i {
+  margin-right: 8px;
+}
+
+.action-buttons {
+  margin-top: 30px;
+  display: flex;
+  justify-content: center;
+  grid-column: 1 / -1;
+}
+
+.start-btn {
+  background-color: var(--success-color);
+  color: white;
+  font-size: 16px;
+  padding: 12px 30px;
+  border-radius: 6px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 180px;
+}
+
+.start-btn:hover {
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.start-btn i {
+  margin-right: 8px;
+}
+
+.stop-btn {
+  background-color: var(--error-color);
+  color: white;
+  font-size: 16px;
+  padding: 12px 30px;
+  border-radius: 6px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 180px;
+}
+
+.stop-btn:hover {
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.stop-btn i {
+  margin-right: 8px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

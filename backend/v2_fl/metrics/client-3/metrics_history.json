@@ -1,0 +1,71 @@
+[
+  {
+    "round": 1,
+    "fit_loss": 0.2924352452826144,
+    "accuracy": 65.67164179104478,
+    "ensemble_weights": [
+      0.35036460226151056,
+      0.22772457525478212,
+      0.1830288539727609,
+      0.23888196851094656
+    ],
+    "ipfs_hash": "QmRif3QXXxRyqr8kokfzFvQ1j8A8wYwJFa4HaaDJaqB3xm",
+    "wallet_address": "0x2d001fEcd511338F78DD5dBBc6E062E1Cc09Ba12",
+    "timestamp": "2025-05-01T04:58:12.259194+00:00"
+  },
+  {
+    "round": 1,
+    "eval_loss": 0.27953073649264093,
+    "accuracy": 65.67164179104478,
+    "eval_samples": 67,
+    "ipfs_hash": "QmbDdCw1FMUXCdTkQmVb1YdnPPK3m6UXoeaL7YhHJ1JLtQ",
+    "wallet_address": "0x2d001fEcd511338F78DD5dBBc6E062E1Cc09Ba12",
+    "timestamp": "2025-05-01T04:58:15.338919+00:00"
+  },
+  {
+    "round": 2,
+    "fit_loss": 0.28919157296863957,
+    "accuracy": 65.67164179104478,
+    "ensemble_weights": [
+      0.1932143908669808,
+      0.19806011937901188,
+      0.12383171113882757,
+      0.48489377861517974
+    ],
+    "ipfs_hash": "QmVGnG2U9G9QzMQhfJXQQCBtcDL3rtv35r2TZT5VYKQ5dV",
+    "wallet_address": "0x2d001fEcd511338F78DD5dBBc6E062E1Cc09Ba12",
+    "timestamp": "2025-05-01T04:58:17.171833+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": 0.28964224190854315,
+    "accuracy": 65.67164179104478,
+    "eval_samples": 67,
+    "ipfs_hash": "QmXrhZZ3piXqQCtG7yKaVV4SNV5Bdp3PSFHNpbUVwuDGaD",
+    "wallet_address": "0x2d001fEcd511338F78DD5dBBc6E062E1Cc09Ba12",
+    "timestamp": "2025-05-01T04:58:17.597731+00:00"
+  },
+  {
+    "round": 3,
+    "fit_loss": 0.2919195463408285,
+    "accuracy": 65.67164179104478,
+    "ensemble_weights": [
+      0.35100955290458036,
+      0.19866508999986754,
+      0.17409607673628671,
+      0.2762292803592654
+    ],
+    "ipfs_hash": "QmayYRvJZwmFncjq41AzkNJJtQVKTD3TgAtFwxVPx5EusT",
+    "wallet_address": "0x2d001fEcd511338F78DD5dBBc6E062E1Cc09Ba12",
+    "timestamp": "2025-05-01T04:58:22.044810+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 0.28259633014451213,
+    "accuracy": 65.67164179104478,
+    "eval_samples": 67,
+    "ipfs_hash": "QmREXUJrJJfHKCyaGAzHgBBn195aXFQHsXe81Hvzj7J7Sy",
+    "wallet_address": "0x2d001fEcd511338F78DD5dBBc6E062E1Cc09Ba12",
+    "timestamp": "2025-05-01T04:58:22.354468+00:00"
+  }
+]

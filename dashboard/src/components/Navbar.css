@@ -1,0 +1,66 @@
+/* src/components/Navbar.css */
+.navbar {
+  display: flex;
+  flex-direction: column;
+  width: 250px;
+  height: 100vh;
+  background-color: #1a237e;
+  color: white;
+  position: fixed;
+  left: 0;
+  top: 0;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+  padding: 20px;
+  font-size: 20px;
+  font-weight: bold;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.navbar-brand a {
+  color: white;
+  text-decoration: none;
+}
+
+.navbar-nav {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+}
+
+.navbar-nav li {
+  margin: 0;
+  transition: background-color 0.3s;
+}
+
+.navbar-nav li a {
+  color: white;
+  text-decoration: none;
+  padding: 15px 20px;
+  display: flex;
+  align-items: center;
+}
+
+.navbar-nav li a:before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background-color: rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  margin-right: 12px;
+}
+
+.navbar-nav li:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.navbar-nav li.active {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.navbar-nav li.active a:before {
+  background-color: white;
+}
