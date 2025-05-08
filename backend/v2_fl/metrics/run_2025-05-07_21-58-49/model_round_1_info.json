@@ -1,0 +1,22 @@
+{
+  "model_id": "0x1b590e4a31e2a533c4cc86eb67be1eb4d6aa1f144177588bf2995f0e63cb0c50",
+  "ipfs_hash": "QmPanNHMxP1uiSnsB2cYwLD1SWohdTn9N8kNFKMs8KWGbQ",
+  "round": 1,
+  "timestamp": 1746628247,
+  "participating_clients": 0,
+  "is_active": true,
+  "version": "1.0.1",
+  "model_info": {
+    "round": 1,
+    "timestamp": "2025-05-07T14:30:47.451504+00:00",
+    "version": "1.0.1",
+    "is_ensemble": true,
+    "num_models": 4,
+    "model_names": [
+      "lr",
+      "svc",
+      "rf",
+      "meta_lr"
+    ]
+  }
+}

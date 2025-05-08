@@ -12,14 +12,10 @@ import logging
 from pathlib import Path
 from datetime import datetime, timezone
 from sklearn.model_selection import train_test_split
+import hashlib
 
 
-import random
-import threading
-from web3.exceptions import TransactionNotFound
-from hexbytes import HexBytes
 import pandas as pd
-
 import flwr as fl
 import torch
 import torch.nn as nn
@@ -130,6 +126,9 @@ class GAStackingClient(fl.client.NumPyClient):
                     logger.warning("The server may reject this client's contributions")
             except Exception as e:
                 logger.error(f"Failed to verify client authorization: {e}")
+        
+        self.log_system_status()
+
     
     def split_train_val(self, validation_split: float = 0.2):
         """
@@ -559,6 +558,7 @@ class GAStackingClient(fl.client.NumPyClient):
             generations=self.ga_generations,
             device=self.device
         )
+        self.ga_stacking.client = self
         
         # Run GA optimization
         logger.info("Starting GA-Stacking optimization")
@@ -788,9 +788,25 @@ class GAStackingClient(fl.client.NumPyClient):
                     accuracy=accuracy
                 )
                 logger.info(f"Contribution recorded on blockchain, tx: {tx_hash}")
+                
+                # Log transaction for monitoring
+                self.log_transaction_metrics(
+                    tx_hash=tx_hash,
+                    gas_used=None,  # Update this if you can get gas used from the transaction
+                    success=True,
+                    round_num=round_num
+                )
                 metrics["blockchain_tx"] = tx_hash
             except Exception as e:
                 logger.error(f"Failed to record contribution on blockchain: {e}")
+                # Log failed transaction
+                self.log_transaction_metrics(
+                    tx_hash=None,
+                    gas_used=None,
+                    success=False,
+                    round_num=round_num,
+                    error=str(e)
+                )
         
         # Add to metrics history
         self.metrics_history.append({
@@ -953,7 +969,7 @@ class GAStackingClient(fl.client.NumPyClient):
             "ensemble_size": len(self.base_models) if self.ensemble_model else 0
         }
         
-        return float(loss), len(self.test_loader.dataset), metrics
+        return float(loss), len(self.test_loader.dataset), metrics    
     
     def _evaluate_ensemble(self, data_loader: DataLoader) -> Tuple[float, float]:
         """
@@ -1046,8 +1062,123 @@ class GAStackingClient(fl.client.NumPyClient):
         with open(filepath, "w") as f:
             json.dump(self.metrics_history, f, indent=2)
         logger.info(f"Saved metrics history to {filepath}")
+        
+    def log_ga_progress(self, generation, best_fitness, avg_fitness):
+        """Log GA-Stacking progress for the monitoring dashboard"""
+        if not self.client_id:
+            return  # Skip logging if client_id is not set
+            
+        # Create directory structure if it doesn't exist
+        client_dir = f'metrics/{self.client_id}'
+        os.makedirs(client_dir, exist_ok=True)
+        
+        ga_file = f'{client_dir}/ga_progress.json'
+        
+        # Read existing data if available
+        ga_data = {
+            'best_fitness': [],
+            'avg_fitness': [],
+            'weights': []
+        }
+        
+        if os.path.exists(ga_file):
+            try:
+                with open(ga_file, 'r') as f:
+                    existing_data = json.load(f)
+                    # Only use existing data if it's properly structured
+                    if isinstance(existing_data, dict):
+                        for key in ga_data:
+                            if key in existing_data and isinstance(existing_data[key], list):
+                                ga_data[key] = existing_data[key]
+            except Exception as e:
+                logger.warning(f"Error reading GA progress file: {e}")
+        
+        # Get current weights from GA-Stacking or ensemble model
+        weights_dict = {}
+        if hasattr(self, 'ga_stacking') and hasattr(self.ga_stacking, 'best_individual'):
+            individual = self.ga_stacking.best_individual
+            model_names = self.model_names[:len(individual)]
+            for i, name in enumerate(model_names):
+                if i < len(individual):
+                    weights_dict[name] = float(individual[i])
+        elif hasattr(self, 'ensemble_model') and hasattr(self.ensemble_model, 'weights'):
+            weights = self.ensemble_model.weights.cpu().numpy().tolist()
+            model_names = self.model_names[:len(weights)]
+            for i, name in enumerate(model_names):
+                if i < len(weights):
+                    weights_dict[name] = weights[i]
+        
+        # Append new data
+        ga_data['best_fitness'].append(float(best_fitness))
+        ga_data['avg_fitness'].append(float(avg_fitness))
+        ga_data['weights'].append(weights_dict)
+        
+        # Write updated data
+        try:
+            with open(ga_file, 'w') as f:
+                json.dump(ga_data, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Error writing GA progress file: {e}")
 
+    def log_system_status(self):
+        """Log system status for monitoring dashboard"""
+        try:
+            # Ensure directory exists
+            os.makedirs('metrics', exist_ok=True)
+            
+            # Determine connection status
+            ipfs_connected = self.ipfs is not None
+            blockchain_connected = self.blockchain is not None and self.wallet_address is not None
+            
+            # Create status data
+            status = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "ipfs": {
+                    "status": "Connected" if ipfs_connected else "Disconnected",
+                    "url": str(self.ipfs.ipfs_api_url) if ipfs_connected else None
+                },
+                "blockchain": {
+                    "status": "Connected" if blockchain_connected else "Disconnected",
+                    "address": self.wallet_address if blockchain_connected else None
+                },
+                "client_id": self.client_id
+            }
+            
+            # Write status to file
+            with open('metrics/system_status.json', 'w') as f:
+                json.dump(status, f, indent=2)
+                
+        except Exception as e:
+            logger.warning(f"Failed to log system status: {e}")
 
+    def log_transaction_metrics(self, tx_hash, gas_used, success, round_num=None, error=None):
+        """Log blockchain transaction metrics for the dashboard"""
+        import os
+        import json
+        from datetime import datetime, timezone
+        
+        # Ensure directory exists
+        os.makedirs('metrics/blockchain', exist_ok=True)
+        
+        # Create transaction metrics
+        metrics = {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'client_id': self.client_id,
+            'wallet_address': self.wallet_address,
+            'tx_hash': tx_hash,
+            'gas_used': gas_used,
+            'success': success,
+            'round_num': round_num,
+        }
+        
+        # Add error if present
+        if error:
+            metrics['error'] = str(error)
+        
+        # Write to file (append mode)
+        with open('metrics/blockchain/transaction_metrics.jsonl', 'a') as f:
+            f.write(json.dumps(metrics) + '\n')
+            
 def start_client(
     server_address: str = "127.0.0.1:8080",
     ipfs_url: str = "http://127.0.0.1:5001",
@@ -1209,6 +1340,7 @@ if __name__ == "__main__":
     parser.add_argument("--ga-population-size", type=int, default=30, help="Size of GA population")
     parser.add_argument("--train-file", type=str, help="Path to training data file")
     parser.add_argument("--test-file", type=str, help="Path to test data file")
+    
     args = parser.parse_args()
     
     # Check if contract address is stored in file
@@ -1224,7 +1356,6 @@ if __name__ == "__main__":
     if args.train_file and args.test_file:
         train_file = args.train_file
         test_file = args.test_file
-    
     start_client(
         server_address=args.server_address,
         ipfs_url=args.ipfs_url,
@@ -1239,5 +1370,4 @@ if __name__ == "__main__":
         device=args.device,
         ga_generations=args.ga_generations,
         ga_population_size=args.ga_population_size
-        
     )

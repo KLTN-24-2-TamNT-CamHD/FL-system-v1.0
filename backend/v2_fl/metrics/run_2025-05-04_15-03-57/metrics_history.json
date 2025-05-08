@@ -1,0 +1,110 @@
+[
+  {
+    "round": 1,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 4,
+      "model_names": "lr,meta_lr,rf,svc",
+      "ensemble_weights": [
+        0.02571460358706858,
+        0.3190271897712082,
+        0.45605258956765404,
+        0.19920561707406922
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "verification_failed_clients": 0
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-04T08:04:06.113964+00:00"
+  },
+  {
+    "round": 1,
+    "eval_loss": 0.42663702368736267,
+    "eval_metrics": {
+      "ensemble_size": 4.0,
+      "accuracy": 53.78787878787879,
+      "loss": 0.4266370282028661,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 53.78787878787879
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-04T08:04:08.237470+00:00"
+  },
+  {
+    "round": 2,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 4,
+      "model_names": "lr,meta_lr,rf,svc",
+      "ensemble_weights": [
+        0.035382478974167145,
+        0.34094830347823,
+        0.43221474188661146,
+        0.19145447566099144
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "verification_failed_clients": 0
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-04T08:04:14.869939+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": 0.4291926920413971,
+    "eval_metrics": {
+      "ensemble_size": 4.0,
+      "accuracy": 54.54545454545455,
+      "loss": 0.42919269700845086,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 54.54545454545455
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-04T08:04:16.990118+00:00"
+  },
+  {
+    "round": 3,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 4,
+      "model_names": "lr,meta_lr,rf,svc",
+      "ensemble_weights": [
+        0.06314246512663935,
+        0.11861018633282816,
+        0.5517989046375592,
+        0.26644844390297323
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "verification_failed_clients": 0
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-04T08:04:23.804234+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 0.45000995695590973,
+    "eval_metrics": {
+      "ensemble_size": 4.0,
+      "accuracy": 56.06060606060606,
+      "loss": 0.45000994702180225,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 56.06060606060606
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-04T08:04:25.911911+00:00"
+  }
+]

@@ -4,7 +4,7 @@ module.exports = {
       host: "192.168.1.146",
       port: 7545,  // Default Ganache GUI port (or 8545 for ganache-cli)
       network_id: "5777",
-      from: "0xdE1a8A52252a7724aDfb1AcaC300Ea1b2c4eaFE0" // Get this from Ganache UI
+      from: "0x8c11123e02617Fda3B2bD8691B9965796b7c1257" // Get this from Ganache UI
     }
   },
   

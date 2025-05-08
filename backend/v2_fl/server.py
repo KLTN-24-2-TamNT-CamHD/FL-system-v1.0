@@ -11,8 +11,9 @@ from typing import Dict, List, Optional, Tuple, Union, Any, Set
 from datetime import datetime, timezone
 import logging
 from pathlib import Path
-
+from flwr.server.client_manager import ClientManager
 import pytz
+import hashlib
 
 import flwr as fl
 from flwr.server.client_proxy import ClientProxy
@@ -31,6 +32,8 @@ import numpy as np
 from ipfs_connector import IPFSConnector
 from blockchain_connector import BlockchainConnector
 from ensemble_aggregation import EnsembleAggregator
+from monitoring import start_monitoring_server
+
 
 # Configure logging
 logging.basicConfig(
@@ -61,8 +64,20 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
         # Initialize blockchain connector
         self.blockchain = blockchain_connector
         
-        # Set version prefix
-        self.version_prefix = version_prefix
+        # Set base version prefix
+        self.base_version_prefix = version_prefix
+        
+        # Generate session-specific versioning
+        timestamp = int(time.time())
+        self.session_id = timestamp
+        readable_date = datetime.now().strftime("%m%d")
+        # Format: MMDD-last4digits of timestamp
+        self.session_tag = f"{readable_date}-{str(timestamp)[-4:]}"
+        
+        # Create the full version prefix (base.session)
+        self.version_prefix = f"{self.base_version_prefix}.{self.session_tag}"
+        
+        logger.info(f"Initialized with version strategy: base={self.base_version_prefix}, session={self.session_tag}")
         
         # Flag to only allow authorized clients
         self.authorized_clients_only = authorized_clients_only
@@ -139,45 +154,45 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
     ) -> Optional[Parameters]:
         """Initialize global model parameters."""
         
-        # Define the correct dimensions based on your configuration
-        input_dim = 8  # Feature dimension (based on support vectors in your JSON)
-        output_dim = 1  # Output dimension
+        # Define the correct dimensions for the diabetes dataset
+        input_dim = 9  # Diabetes dataset has 9 features
+        output_dim = 1  # Binary classification (0 or 1)
         num_base_models = 3  # Number of base models
         
-        # Define initial model ensemble configuration matching your JSON
+        # Define initial model ensemble configuration for diabetes dataset
         initial_ensemble_config = [
             {
                 "estimator": "lr",
                 "input_dim": input_dim,
                 "output_dim": output_dim,
-                "coef": [[0.1, 0.2, 0.1, 0.3, 0.15, 0.25, 0.1, 0.2]],  # 8 features
-                "intercept": [0.0]
+                "coef": [[0.1, 0.2, 0.1, 0.3, 0.2, 0.1, 0.4, 0.1, 0.3]],  # 9 values for 9 features
+                "intercept": [0.0102]
             },
             {
                 "estimator": "svc",
                 "input_dim": input_dim,
                 "output_dim": output_dim,
-                "dual_coef": [[0.5, -0.5]],
+                "dual_coef": [[0.4321, -0.4321]],
                 "support_vectors": [
-                    [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],  # 8 features
-                    [0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]   # 8 features
+                    [1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 7.7, 8.8, 9.9],  # 9 values for 9 features
+                    [9.9, 8.8, 7.7, 6.6, 5.5, 4.4, 3.3, 2.2, 1.1]
                 ],
-                "intercept": [0.0]
+                "intercept": [0.5000]
             },
             {
                 "estimator": "rf",
                 "input_dim": input_dim,
                 "output_dim": output_dim,
                 "n_estimators": 100,
-                "feature_importances": [0.1, 0.15, 0.2, 0.1, 0.15, 0.1, 0.1, 0.1]  # 8 features
+                "feature_importances": [0.12, 0.05, 0.15, 0.10, 0.20, 0.18, 0.10, 0.05, 0.05]  # 9 values
             },
             {
                 "estimator": "meta_lr",
                 "input_dim": num_base_models,
                 "meta_input_dim": num_base_models,
                 "output_dim": output_dim,
-                "coef": [[0.33, 0.33, 0.34]],  # Equal weights for 3 base models
-                "intercept": [0.0]
+                "coef": [[0.33, 0.33, 0.34]],  # Weights for 3 base models
+                "intercept": [-0.8200]
             }
         ]
         
@@ -195,7 +210,7 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
         logger.info(f"Initialized server with custom ensemble configuration: input_dim={input_dim}, meta_input_dim={num_base_models}")
         
         return parameters
-
+    
     def configure_fit(
         self, server_round: int, parameters: Parameters, client_manager: fl.server.client_manager.ClientManager
     ) -> List[Tuple[ClientProxy, FitIns]]:
@@ -219,12 +234,14 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
                 ensemble_state = json.loads(ensemble_bytes.decode('utf-8'))
                 
                 # Create metadata with ensemble state
+                version_data = self.get_version_strategy(server_round)
                 model_metadata = {
                     "ensemble_state": ensemble_state,
                     "info": {
                         "round": server_round,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "version": self.get_version(server_round),
+                        "version": version_data["version"],
+                        "version_data": version_data,
                         "is_ensemble": True,
                         "num_models": len(ensemble_state["model_names"]),
                         "model_names": ensemble_state["model_names"]
@@ -267,7 +284,9 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
             "is_ensemble": is_ensemble  # Add this flag to indicate ensemble model
         }
         
-        fit_ins = FitIns(parameters, config)
+        # fit_ins = FitIns(parameters, config)
+        empty_parameters = ndarrays_to_parameters([np.array([])])  # Empty params
+        fit_ins = FitIns(empty_parameters, config)
         
         # Sample clients for this round
         clients = client_manager.sample(
@@ -636,6 +655,68 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
                 json.dump(round_metrics, f, indent=2)
             logger.info(f"Saved round {round_num} metrics to {round_file}")
     
+    # Model versioning strategy
+    def get_version_strategy(self, server_round: int) -> dict:
+        """
+        Generate a comprehensive version strategy with metadata.
+        
+        Args:
+            server_round: Current federated learning round
+            
+        Returns:
+            Dictionary with version string and metadata
+        """
+        # Generate a session ID based on timestamp if not already set
+        if not hasattr(self, 'session_id'):
+            # Create a short, human-readable session ID
+            timestamp = int(time.time())
+            self.session_id = timestamp
+            readable_date = datetime.now().strftime("%m%d")
+            # Format: MMDD-last4digits of timestamp
+            self.session_tag = f"{readable_date}-{str(timestamp)[-4:]}"
+            
+            # Generate a short hash of training parameters for uniqueness
+            config_hash = hashlib.md5(
+                f"{self.min_fit_clients}_{self.min_evaluate_clients}_{self.version_prefix}".encode()
+            ).hexdigest()[:4]
+            
+            # Store original version prefix
+            self.base_version_prefix = self.version_prefix
+            
+            # Update version prefix to include session info
+            # Format: original_prefix.sessiontag
+            self.version_prefix = f"{self.base_version_prefix}.{self.session_tag}"
+        
+        # Generate full version with round number
+        # Format: original_prefix.sessiontag.round
+        version = f"{self.version_prefix}.{server_round}"
+        
+        # Create version metadata
+        version_data = {
+            "version": version,
+            "base_version": self.base_version_prefix,
+            "session_id": self.session_id,
+            "session_tag": self.session_tag,
+            "round": server_round,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        
+        return version_data
+
+    def get_version(self, server_round: int) -> str:
+        """
+        Generate a version string based on round number (backward compatible).
+        
+        Args:
+            server_round: Current federated learning round
+            
+        Returns:
+            Version string
+        """
+        version_data = self.get_version_strategy(server_round)
+        return version_data["version"]
+    
+    
     def save_client_stats(self, filepath: str = "metrics/client_stats.json"):
         """Save client contribution statistics to a file."""
         if not self.blockchain:
@@ -687,58 +768,75 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
             return
         
         try:
-            # Get model history from blockchain
-            models = self.blockchain.get_all_models(self.version_prefix)
-            
             metrics_dir = Path(filepath).parent
+            all_models = []
+            
+            # Instead of trying to get all models or using version filtering,
+            # specifically request models for the rounds we know exist
+            # This is more reliable than trying to filter by version
+            max_round = len(self.metrics_history)
+            logger.info(f"Retrieving models for {max_round} completed rounds")
+            
+            for round_num in range(1, max_round + 1):
+                try:
+                    # Try to get the model for this round
+                    models = self.blockchain.get_models_by_round(round_num)
+                    if models and len(models) > 0:
+                        # Get the latest model for this round
+                        model_details = self.blockchain.get_latest_model_by_round(round_num)
+                        if model_details:
+                            all_models.append(model_details)
+                            logger.info(f"Found model for round {round_num}")
+                            
+                            # Try to get the model data from IPFS
+                            try:
+                                ipfs_hash = model_details.get("ipfs_hash")
+                                if ipfs_hash:
+                                    model_data = self.ipfs.get_json(ipfs_hash)
+                                    if model_data:
+                                        # Save the complete model data including weights
+                                        model_file = metrics_dir / f"model_round_{round_num}.json"
+                                        with open(model_file, "w") as f:
+                                            json.dump(model_data, f, indent=2)
+                                        logger.info(f"Saved round {round_num} model data to {model_file}")
+                                        
+                                        # Save a lightweight model info file (without weights)
+                                        info_file = metrics_dir / f"model_round_{round_num}_info.json"
+                                        model_info = {**model_details}
+                                        if model_data and "info" in model_data:
+                                            model_info["model_info"] = model_data["info"]
+                                        with open(info_file, "w") as f:
+                                            json.dump(model_info, f, indent=2)
+                            except Exception as e:
+                                logger.error(f"Failed to get model data for round {round_num}: {e}")
+                                # Save just the model metadata if we couldn't get the full data
+                                model_file = metrics_dir / f"model_round_{round_num}_metadata.json"
+                                with open(model_file, "w") as f:
+                                    json.dump(model_details, f, indent=2)
+                except Exception as e:
+                    logger.error(f"Error getting model for round {round_num}: {str(e)}")
             
             # Save combined model history
             with open(filepath, "w") as f:
-                json.dump(models, f, indent=2)
+                json.dump(all_models, f, indent=2)
             
-            logger.info(f"Saved model history to {filepath}")
-            
-            # Save individual model data to separate files
-            for model in models:
-                round_num = model.get("round", 0)
-                model_file = metrics_dir / f"model_round_{round_num}.json"
-                
-                # Try to get the model data from IPFS
-                try:
-                    ipfs_hash = model.get("ipfs_hash")
-                    if ipfs_hash:
-                        model_data = self.ipfs.get_json(ipfs_hash)
-                        if model_data:
-                            # Save the complete model data including weights
-                            with open(model_file, "w") as f:
-                                json.dump(model_data, f, indent=2)
-                            logger.info(f"Saved round {round_num} model data to {model_file}")
-                            
-                            # Save a lightweight model info file (without weights)
-                            info_file = metrics_dir / f"model_round_{round_num}_info.json"
-                            model_info = {**model}
-                            if model_data and "info" in model_data:
-                                model_info["model_info"] = model_data["info"]
-                            with open(info_file, "w") as f:
-                                json.dump(model_info, f, indent=2)
-                except Exception as e:
-                    logger.error(f"Failed to get model data for round {round_num}: {e}")
-                    # Save just the model metadata if we couldn't get the full data
-                    model_file = metrics_dir / f"model_round_{round_num}_metadata.json"
-                    with open(model_file, "w") as f:
-                        json.dump(model, f, indent=2)
-                    
+            logger.info(f"Saved model history with {len(all_models)} models to {filepath}")
+            latest_model = self.blockchain.get_latest_version_model("1.0")
+            logger.info(f"Updated Latest model: {latest_model}")
         except Exception as e:
             logger.error(f"Failed to save model history: {e}")
+            # Add fallback to save an empty array if all else fails
+            with open(filepath, "w") as f:
+                json.dump([], f, indent=2)
 
 def start_server(
-    server_address: str = "0.0.0.0:8080",
+    server_address: str = "0.0.0.0:8088",
     num_rounds: int = 3,
     min_fit_clients: int = 2,
     min_evaluate_clients: int = 2,
     fraction_fit: float = 1.0,
-    ipfs_url: str = "http://127.0.0.1:5001",
-    ganache_url: str = "http://127.0.0.1:7545",
+    ipfs_url: str = "http://127.0.0.1:5001/api/v0",
+    ganache_url: str = "http://191.168.1.146:7545",
     contract_address: Optional[str] = None,
     private_key: Optional[str] = None,
     deploy_contract: bool = False,
@@ -841,6 +939,9 @@ def start_server(
     timestamp = local_time.strftime("%Y-%m-%d_%H-%M-%S")
     metrics_dir = Path(f"metrics/run_{timestamp}")
     metrics_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Start monitor server
+    monitor = start_monitoring_server(port=8050)
     
     # Start server
     server = fl.server.Server(client_manager=fl.server.SimpleClientManager(), strategy=strategy)

@@ -1,0 +1,29 @@
+{
+  "model_id": "0xf166d7a3caedcee8d6faf25f4ecfeee3d843ef8431e05a8b862b2d7bccb43ccb",
+  "ipfs_hash": "QmbPEUp3sNsSr2iqDWjSQNdgBDVgwRHw9UurnJhkhAMquD",
+  "round": "1.0.0508-6390.1",
+  "version": 1746716391,
+  "timestamp": 0,
+  "participating_clients": "0x8c11123e02617Fda3B2bD8691B9965796b7c1257",
+  "model_info": {
+    "round": 1,
+    "timestamp": "2025-05-08T14:59:50.799721+00:00",
+    "version": "1.0.0508-6390.1",
+    "version_data": {
+      "version": "1.0.0508-6390.1",
+      "base_version": "1.0",
+      "session_id": 1746716390,
+      "session_tag": "0508-6390",
+      "round": 1,
+      "timestamp": "2025-05-08T14:59:50.799705+00:00"
+    },
+    "is_ensemble": true,
+    "num_models": 4,
+    "model_names": [
+      "lr",
+      "svc",
+      "rf",
+      "meta_lr"
+    ]
+  }
+}

@@ -685,7 +685,6 @@ def get_ensemble_state_dict(
     
     return ensemble_state
 
-
 def load_ensemble_from_state_dict(
     ensemble_state: Dict[str, Any],
     model_classes: List[nn.Module] = None,

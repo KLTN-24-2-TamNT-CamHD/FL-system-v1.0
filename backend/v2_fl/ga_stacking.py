@@ -11,6 +11,8 @@ import torch.nn as nn
 from sklearn.model_selection import KFold
 import logging
 
+from datetime import datetime, timezone
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -318,6 +320,10 @@ class GAStacking:
                        f"Best Fitness: {current_best_fitness:.4f}, "
                        f"Avg Fitness: {np.mean(fitness_scores):.4f}")
             
+            # Add this line to log for monitoring
+            if hasattr(self, 'client') and hasattr(self.client, 'log_ga_progress'):
+                self.client.log_ga_progress(generation, current_best_fitness, np.mean(fitness_scores))
+            
             # Evolve population
             if generation < self.generations - 1:
                 population = self.evolve_population(population, fitness_scores)
@@ -484,3 +490,47 @@ class EnsembleModel(nn.Module):
             Dictionary mapping model names to weights
         """
         return {name: float(weight) for name, weight in zip(self.model_names, self.weights)}
+    
+    def get_state_dict(self) -> dict:
+        """
+        Get a serializable state dictionary of the ensemble model.
+        
+        Returns:
+            Dictionary containing the ensemble state
+        """
+        # Convert weights to a serializable format
+        if hasattr(self.weights, 'cpu'):
+            # Handle PyTorch tensor
+            weights = self.weights.cpu().numpy().tolist()
+        elif hasattr(self.weights, 'tolist'):
+            # Handle numpy array
+            weights = self.weights.tolist()
+        else:
+            # Handle Python list or other format
+            weights = self.weights
+        
+        # Include model names if available
+        model_names = self.model_names if hasattr(self, 'model_names') else [f"model_{i}" for i in range(len(self.models))]
+        
+        # Get input and output dimensions if available from the first model
+        input_dim = None
+        output_dim = None
+        if self.models and hasattr(self.models[0], 'input_dim'):
+            input_dim = self.models[0].input_dim
+        if self.models and hasattr(self.models[0], 'output_dim'):
+            output_dim = self.models[0].output_dim
+        
+        # Create the state dictionary
+        ensemble_state = {
+            "weights": weights,
+            "model_names": model_names,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Add dimensions if available
+        if input_dim is not None:
+            ensemble_state["input_dim"] = input_dim
+        if output_dim is not None:
+            ensemble_state["output_dim"] = output_dim
+        
+        return ensemble_state

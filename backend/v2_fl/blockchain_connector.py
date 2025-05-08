@@ -161,66 +161,85 @@ class BlockchainConnector:
         except Exception as e:
             raise RuntimeError(f"Error deploying contract: {e}")
     
-    def register_model(
-        self, 
-        ipfs_hash: str, 
-        round_num: int, 
-        version: str,
-        participating_clients: int = 0
-    ) -> str:
+    def register_model(self, ipfs_hash, round_num, version, participating_clients):
         """
-        Register a model in the blockchain or update it if it already exists.
+        Register a new model in the blockchain.
         
         Args:
             ipfs_hash: IPFS hash of the model
-            round_num: Federated learning round number
-            version: Model version (semver format: major.minor.patch)
-            participating_clients: Number of clients that participated in training
+            round_num: Training round number (will be converted to uint32)
+            version: Model version string or timestamp
+            participating_clients: Number of clients that participated (will be converted to uint32)
             
         Returns:
-            Transaction hash
+            Transaction hash if successful, None otherwise
+        """
+        try:
+            # Convert parameters to appropriate types
+            round_num = int(round_num)
+            participating_clients = int(participating_clients)
+            
+            # Use our improved transaction sending method
+            function_args = [ipfs_hash, round_num, version, participating_clients]
+            tx_hash = self.send_blockchain_transaction("registerModel", function_args)
+            
+            if tx_hash:
+                logging.info(f"Model registered successfully: {ipfs_hash}, round: {round_num}")
+            
+            return tx_hash
+        except Exception as e:
+            logging.error(f"Failed to register model: {str(e)}")
+            return None
+
+    def register_or_update_model(self, ipfs_hash, round_num, version, participating_clients):
+        """
+        Register a model in the blockchain or update it if models already exist for this round.
+        
+        Args:
+            ipfs_hash: IPFS hash of the model
+            round_num: Federated learning round number (will be converted to uint32)
+            version: Model version (can be a timestamp for simplified versioning)
+            participating_clients: Number of clients that participated (will be converted to uint32)
+            
+        Returns:
+            Transaction hash or None if failed
         """
         if not self.contract:
             raise RuntimeError("Contract not loaded")
         
-        # Build transaction
-        tx_params = {
-            'from': self.account if isinstance(self.account, str) else self.account.address,
-            'nonce': self.web3.eth.get_transaction_count(
-                self.account if isinstance(self.account, str) else self.account.address
-            ),
-            'gas': 2000000,
-            'gasPrice': self.web3.eth.gas_price
-        }
-        
-        # Use registerOrUpdateModel function which handles both cases
-        transaction = self.contract.functions.registerOrUpdateModel(
-            ipfs_hash, 
-            round_num, 
-            version,
-            participating_clients
-        ).build_transaction(tx_params)
-        
-        # Sign transaction if using private key
+        # First, check if models exist for this round
         try:
-            if isinstance(self.account, Account):
-                signed_tx = self.account.sign_transaction(transaction)
-                tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
-            else:
-                tx_hash = self.web3.eth.send_transaction(transaction)
-            
-            # Wait for transaction to be mined
-            _ = self.web3.eth.wait_for_transaction_receipt(tx_hash)
-            
-            # Convert HexBytes to string for easier handling
-            if isinstance(tx_hash, HexBytes):
-                tx_hash = tx_hash.hex()
-                
-            print(f"Model registered with transaction: {tx_hash}")
-            return tx_hash
+            # This call doesn't create a transaction - it's just a read operation
+            models_for_round = self.contract.functions.getModelsByRound(round_num).call()
+            models_exist = len(models_for_round) > 0
         except Exception as e:
-            logging.error(f"Failed to register/update model in blockchain: {str(e)}")
-            return None
+            logging.warning(f"Error checking for existing models: {e}")
+            # If we can't check, we'll proceed with trying to register
+            models_exist = False
+        
+        # Choose the right function based on whether models exist for this round
+        if models_exist:
+            function_name = "updateModelByRound"
+            logging.info(f"Models exist for round {round_num}, using {function_name}")
+        else:
+            function_name = "registerModel"
+            logging.info(f"No models for round {round_num}, using {function_name}")
+        
+        # Convert inputs to appropriate types
+        round_num = int(round_num)
+        participating_clients = int(participating_clients)
+        
+        # Send the transaction with our improved transaction manager
+        function_args = [ipfs_hash, round_num, version, participating_clients]
+        tx_hash = self.send_blockchain_transaction(function_name, function_args)
+        
+        if tx_hash:
+            if models_exist:
+                logging.info(f"Model updated with transaction: {tx_hash}")
+            else:
+                logging.info(f"Model registered with transaction: {tx_hash}")
+        
+        return tx_hash
     
     def send_blockchain_transaction(self, transaction_function, function_args, retry_count=5, initial_delay=1):
         """
@@ -299,59 +318,7 @@ class BlockchainConnector:
                 else:
                     logging.error(f"All {retry_count} transaction attempts failed")
                     return None
-        
-    def register_or_update_model(
-        self, 
-        ipfs_hash: str, 
-        round_num: int, 
-        version: str,
-        participating_clients: int = 0
-    ) -> str:
-        """
-        Register a model in the blockchain or update it if models already exist for this round.
-        
-        Args:
-            ipfs_hash: IPFS hash of the model
-            round_num: Federated learning round number
-            version: Model version (semver format: major.minor.patch)
-            participating_clients: Number of clients that participated in training
             
-        Returns:
-            Transaction hash or None if failed
-        """
-        if not self.contract:
-            raise RuntimeError("Contract not loaded")
-        
-        # First, check if models exist for this round
-        try:
-            # This call doesn't create a transaction - it's just a read operation
-            models_for_round = self.contract.functions.getModelsByRound(round_num).call()
-            models_exist = len(models_for_round) > 0
-        except Exception as e:
-            logging.warning(f"Error checking for existing models: {e}")
-            # If we can't check, we'll proceed with trying to register
-            models_exist = False
-        
-        # Choose the right function based on whether models exist for this round
-        if models_exist:
-            function_name = "updateModelByRound"
-            logging.info(f"Models exist for round {round_num}, using {function_name}")
-        else:
-            function_name = "registerModel"
-            logging.info(f"No models for round {round_num}, using {function_name}")
-        
-        # Send the transaction with our improved transaction manager
-        function_args = [ipfs_hash, round_num, version, participating_clients]
-        tx_hash = self.send_blockchain_transaction(function_name, function_args)
-        
-        if tx_hash:
-            if models_exist:
-                print(f"Model updated with transaction: {tx_hash}")
-            else:
-                print(f"Model registered with transaction: {tx_hash}")
-        
-        return tx_hash
-    
     def authorize_client(self, client_address: str) -> str:
         """
         Authorize a client to participate in federated learning.
@@ -516,20 +483,13 @@ class BlockchainConnector:
         
         return clients
     
-    def record_contribution(
-            self, 
-            client_address: str, 
-            round_num: int, 
-            ipfs_hash: str, 
-            accuracy: float,
-            max_retries: int = 5
-        ) -> str:
+    def record_contribution(self, client_address, round_num, ipfs_hash, accuracy, max_retries=5):
         """
         Record a client's contribution with advanced retry mechanism and nonce management.
         
         Args:
             client_address: Ethereum address of the client
-            round_num: Federated learning round number
+            round_num: Federated learning round number (will be converted to uint32)
             ipfs_hash: IPFS hash of the model contribution
             accuracy: Accuracy achieved by the client (0-100)
             max_retries: Maximum number of retry attempts
@@ -542,6 +502,9 @@ class BlockchainConnector:
         
         # Convert accuracy to blockchain format (multiply by 100 to handle decimals)
         accuracy_int = int(accuracy * 100)
+        
+        # Convert round_num to uint32
+        round_num = int(round_num)
         
         # Get account address consistently
         account_address = self.account if isinstance(self.account, str) else self.account.address
@@ -632,13 +595,36 @@ class BlockchainConnector:
                     base_wait = 2 ** retry_count  # 2, 4, 8, 16...
                     wait_time = base_wait + random.uniform(0.1, 1.0)
                     logging.warning(f"Transaction failed (attempt {retry_count}/{max_retries}), "
-                                       f"retrying in {wait_time:.1f} seconds: {e}")
+                                f"retrying in {wait_time:.1f} seconds: {e}")
                 
                 time.sleep(wait_time)
         
         # If we're here, all retries failed
         logging.error(f"Failed to record contribution after {max_retries} attempts. Last error: {last_error}")
         raise RuntimeError(f"Failed to record contribution: {last_error}")
+
+    def get_round_reward_pool(self, round_num):
+        """
+        Get details about a round's reward pool.
+        
+        Args:
+            round_num: Round number (will be converted to uint32)
+            
+        Returns:
+            Dictionary with pool details
+        """
+        # Convert to uint32
+        round_num = int(round_num)
+        
+        total_amount, allocated_amount, remaining_amount, is_finalized = \
+            self.contract.functions.getRoundRewardPool(round_num).call()
+        
+        return {
+            "total_amount": self.web3.from_wei(total_amount, 'ether'),
+            "allocated_amount": self.web3.from_wei(allocated_amount, 'ether'),
+            "remaining_amount": self.web3.from_wei(remaining_amount, 'ether'),
+            "is_finalized": is_finalized
+        }
 
     def _get_synchronized_nonce(self, address: str) -> int:
         """
@@ -708,12 +694,14 @@ class BlockchainConnector:
             "rewards_claimed": rewards_claimed
         }
     
-    def get_client_contribution_records(self, client_address: str) -> List[Dict[str, Any]]:
+    def get_client_contribution_records(self, client_address, offset=0, limit=100):
         """
-        Get client contribution records.
+        Get client contribution records with pagination.
         
         Args:
             client_address: Ethereum address of the client
+            offset: Starting index for pagination
+            limit: Maximum number of records to retrieve
             
         Returns:
             List of contribution records
@@ -721,19 +709,27 @@ class BlockchainConnector:
         if not self.contract:
             raise RuntimeError("Contract not loaded")
         
-        records = self.contract.functions.getClientContributionRecords(client_address).call()
-        
-        result = []
-        for i in range(len(records[0])):
-            result.append({
-                "round": records[0][i],
-                "accuracy": records[1][i] / 100.0,  # Convert back to decimal
-                "score": records[2][i],
-                "timestamp": records[3][i],
-                "rewarded": records[4][i]
-            })
-        
-        return result
+        try:
+            records = self.contract.functions.getClientContributionRecords(
+                client_address, 
+                offset,
+                limit
+            ).call()
+            
+            result = []
+            for i in range(len(records[0])):
+                result.append({
+                    "round": records[0][i],
+                    "accuracy": records[1][i] / 100.0,  # Convert back to decimal
+                    "score": records[2][i],
+                    "timestamp": records[3][i],
+                    "rewarded": records[4][i]
+                })
+            
+            return result
+        except Exception as e:
+            logging.error(f"Error getting client contribution records: {e}")
+            return []
     
     def has_contributed_in_round(self, client_address: str, round_number: int) -> bool:
         """
@@ -869,6 +865,32 @@ class BlockchainConnector:
         # Convert bytes32 to hex strings
         return [self.web3.to_hex(model_id) for model_id in model_ids]
     
+    def get_latest_model_by_round(self, round_num: int) -> Dict[str, Any]:
+        """
+        Get the latest model for a specific round.
+        
+        Args:
+            round_num: Federated learning round number
+            
+        Returns:
+            Dictionary with model details
+        """
+        if not self.contract:
+            raise RuntimeError("Contract not loaded")
+        
+        # Get latest model by round
+        details = self.contract.functions.getLatestModelByRound(round_num).call()
+        
+        # Format the response
+        return {
+            "model_id": self.web3.to_hex(details[0]),
+            "ipfs_hash": details[1],
+            "round": details[2],
+            "version": details[3],
+            "timestamp": details[4],
+            "participating_clients": details[5]
+        }
+    
     def deactivate_model(self, ipfs_hash: str, round_num: int) -> str:
         """
         Deactivate a model.
@@ -968,8 +990,350 @@ class BlockchainConnector:
             # During development, you might want to be lenient with errors
             return True  # Change to False for stricter validation
         
+    def get_model_by_round(self, round_num: int) -> dict:
+        """
+        Get the registered model information for a specific round.
         
+        Args:
+            round_num: The federated learning round number
+            
+        Returns:
+            Dictionary with model information or None if not found
+        """
+        try:
+            # Call the smart contract's getModelByRound function
+            model_info = self.contract.functions.getModelByRound(round_num).call()
+            
+            # Smart contract returns a tuple with model information
+            # Convert to a more usable dictionary format
+            if model_info and model_info[0]:  # Check if ipfsHash is not empty
+                return {
+                    "ipfsHash": model_info[0],
+                    "roundNum": model_info[1],
+                    "version": model_info[2],
+                    "participatingClients": model_info[3],
+                    "timestamp": model_info[4]
+                }
+            return None
+        except Exception as e:
+            logging.error(f"Failed to get model for round {round_num}: {e}")
+            return None
+            
+    def verify_ipfs_hash(self, round_num: int, ipfs_hash: str) -> bool:
+        """
+        Verify if the provided IPFS hash matches the one registered on the blockchain.
         
+        Args:
+            round_num: The federated learning round number
+            ipfs_hash: The IPFS hash to verify
+            
+        Returns:
+            True if verified, False otherwise
+        """
+        try:
+            model_info = self.get_model_by_round(round_num)
+            if model_info and model_info["ipfsHash"] == ipfs_hash:
+                return True
+            return False
+        except Exception as e:
+            logging.error(f"Failed to verify IPFS hash: {e}")
+            return False
+            
+    def get_client_contributions(self, round_num: int, wallet_address: str) -> dict:
+        """
+        Get client contributions for a specific round.
+        
+        Args:
+            round_num: The federated learning round number
+            wallet_address: The client's wallet address
+            
+        Returns:
+            Dictionary with contribution information or None if not found
+        """
+        try:
+            # Call the smart contract function
+            contribution = self.contract.functions.getClientContribution(
+                round_num, 
+                wallet_address
+            ).call()
+            
+            # Convert tuple to dictionary
+            if contribution and contribution[0]:  # Check if ipfsHash exists
+                return {
+                    "ipfsHash": contribution[0],
+                    "accuracy": contribution[1],
+                    "timestamp": contribution[2] if len(contribution) > 2 else 0
+                }
+            return None
+        except Exception as e:
+            logging.error(f"Failed to get contributions for client {wallet_address}: {e}")
+            return None
+    
+    ################################
+    # MODEL MANAGEMENT
+    ################################
+    def get_models(self, offset=0, limit=100):
+        """
+        Get models from the blockchain with pagination.
+        
+        Args:
+            offset: Starting index (ensure it's an integer)
+            limit: Maximum number of models to retrieve (ensure it's an integer)
+            
+        Returns:
+            Dictionary containing model data arrays
+        """
+        try:
+            offset_int = int(offset)
+            limit_int = int(limit)
+            # Ensure integer types and check for unexpected values
+            if not isinstance(offset, int) or isinstance(offset, bool):
+                logging.warning(f"offset is type {type(offset)}, converting to int")
+                offset = int(float(offset))  # Convert through float in case it's a string with decimal point
+            
+            if not isinstance(limit, int) or isinstance(limit, bool):
+                logging.warning(f"limit is type {type(limit)}, converting to int")
+                limit = int(float(limit))  # Convert through float in case it's a string with decimal point
+            
+            # Debug the actual values being sent
+            logging.info(f"Calling contract.functions.getModels with: offset={offset} (type={type(offset)}), limit={limit} (type={type(limit)})")
+            
+            # Call the getModels function from the contract
+            result = self.contract.functions.getModels(offset, limit).call()
+            
+            # Organize results into a dictionary
+            models = {
+                'modelIds': result[0],
+                'ipfsHashes': result[1],
+                'rounds': result[2],
+                'timestamps': result[3],
+                'participatingClients': result[4],
+                'isActive': result[5]
+            }
+            
+            return models
+        except Exception as e:
+            logging.error(f"Failed to get models: {str(e)}")
+            return None
+
+    def get_model_count(self):
+        """
+        Get the total number of models in the blockchain.
+        
+        Returns:
+            Total number of models
+        """
+        try:
+            return self.contract.functions.getModelCount().call()
+        except Exception as e:
+            logging.error(f"Failed to get model count: {str(e)}")
+            return 0
+
+    # def get_all_models_for_visualization(self):
+    #     """
+    #     Fetch all models for visualization purposes.
+        
+    #     Returns:
+    #         DataFrame containing all model data
+    #     """
+    #     try:
+    #         import pandas as pd
+    #         from datetime import datetime
+            
+    #         # Get the total count of models
+    #         total_count = self.get_model_count()
+    #         if not isinstance(total_count, int):
+    #             logging.warning(f"get_model_count returned {type(total_count)} instead of int, converting to int")
+    #             total_count = int(total_count)
+            
+    #         # Define page size
+    #         page_size = 100
+            
+    #         # Initialize empty lists
+    #         all_model_ids = []
+    #         all_ipfs_hashes = []
+    #         all_rounds = []
+    #         all_timestamps = []
+    #         all_participating_clients = []
+    #         all_is_active = []
+            
+    #         # Debugging output
+    #         logging.info(f"Fetching {total_count} models with page size {page_size}")
+            
+    #         # Fetch models in batches
+    #         for i in range(0, total_count, page_size):
+    #             # Calculate the actual limit for this batch
+    #             remaining = total_count - i
+    #             limit = min(page_size, remaining)
+                
+    #             # Debug the values being passed
+    #             logging.info(f"Calling get_models with offset={i} (type: {type(i)}), limit={limit} (type: {type(limit)})")
+                
+    #             # Make absolutely sure these are integers
+    #             offset_int = int(i)
+    #             limit_int = int(limit)
+                
+    #             try:
+    #                 # Fetch batch of models
+    #                 model_batch = self.get_models(offset_int, limit_int)
+                    
+    #                 if model_batch:
+    #                     # Append batch data to our lists
+    #                     all_model_ids.extend(model_batch['modelIds'])
+    #                     all_ipfs_hashes.extend(model_batch['ipfsHashes'])
+    #                     all_rounds.extend(model_batch['rounds'])
+    #                     all_timestamps.extend(model_batch['timestamps'])
+    #                     all_participating_clients.extend(model_batch['participatingClients'])
+    #                     all_is_active.extend(model_batch['isActive'])
+    #                 else:
+    #                     logging.warning(f"get_models returned None for offset={offset_int}, limit={limit_int}")
+    #             except Exception as e:
+    #                 logging.error(f"Error in batch retrieval: {str(e)}")
+            
+    #         # If we got any data, create a DataFrame
+    #         if all_model_ids:
+    #             df = pd.DataFrame({
+    #                 'modelId': all_model_ids,
+    #                 'ipfsHash': all_ipfs_hashes,
+    #                 'round': all_rounds,
+    #                 'timestamp': [datetime.fromtimestamp(ts) for ts in all_timestamps],
+    #                 'participatingClients': all_participating_clients,
+    #                 'isActive': all_is_active
+    #             })
+    #             return df
+    #         else:
+    #             logging.warning("No model data retrieved")
+    #             return pd.DataFrame()  # Return empty DataFrame
+                
+    #     except Exception as e:
+    #         logging.error(f"Failed to get all models for visualization: {str(e)}")
+    #         return pd.DataFrame()  # Return empty DataFrame instead of None
+    
+    def get_all_models(self, version_prefix=None):
+        """
+        Get all models from the blockchain, optionally filtered by version prefix.
+        
+        Args:
+            version_prefix: Optional filter for model version prefix
+            
+        Returns:
+            List of dictionaries containing model details
+        """
+        try:
+            # Get the total count of models
+            total_count = self.get_model_count()
+            if total_count == 0:
+                return []
+            
+            # Define page size
+            page_size = 100
+            
+            # Initialize list to store models
+            all_models = []
+            
+            # Fetch models in batches
+            for offset in range(0, total_count, page_size):
+                # Calculate the actual limit for this batch
+                limit = min(page_size, total_count - offset)
+                
+                # Ensure offset and limit are integers
+                offset_int = int(offset)
+                limit_int = int(limit)
+                
+                # Fetch batch of models
+                model_batch = self.get_models(offset_int, limit_int)
+                
+                if model_batch:
+                    # Process each model
+                    for i in range(len(model_batch['modelIds'])):
+                        model = {
+                            'model_id': self.web3.to_hex(model_batch['modelIds'][i]) if isinstance(model_batch['modelIds'][i], bytes) else model_batch['modelIds'][i],
+                            'ipfs_hash': model_batch['ipfsHashes'][i],
+                            'round': model_batch['rounds'][i],
+                            'timestamp': model_batch['timestamps'][i],
+                            'participating_clients': model_batch['participatingClients'][i],
+                            'is_active': model_batch['isActive'][i]
+                        }
+                        
+                        # If version prefix is specified, we need to get full model details to filter
+                        if version_prefix is not None:
+                            try:
+                                # Get the model's version
+                                model_details = self.get_model_details(model['model_id'])
+                                if model_details and 'version' in model_details:
+                                    model['version'] = model_details['version']
+                                    # Check if the version matches the prefix
+                                    if not model['version'].startswith(version_prefix):
+                                        continue  # Skip this model if prefix doesn't match
+                            except Exception as e:
+                                logging.warning(f"Could not get version for model {model['model_id']}: {e}")
+                        
+                        all_models.append(model)
+            
+            return all_models
+        except Exception as e:
+            logging.error(f"Failed to get all models: {str(e)}")
+            return []
+            
+    def get_model_details(self, model_id):
+        """
+        Get details for a specific model by ID.
+        
+        Args:
+            model_id: ID of the model
+            
+        Returns:
+            Dictionary with model details
+        """
+        try:
+            # Convert string ID to bytes32 if needed
+            if isinstance(model_id, str) and model_id.startswith('0x'):
+                model_id = self.web3.to_bytes(hexstr=model_id)
+                
+            # Call the getModelDetails function
+            details = self.contract.functions.getModelDetails(model_id).call()
+            
+            # Format the response
+            return {
+                "ipfs_hash": details[0],
+                "round": details[1],
+                "version": details[2],
+                "timestamp": details[3],
+                "participating_clients": details[4],
+                "publisher": details[5],
+                "is_active": details[6]
+            }
+        except Exception as e:
+            logging.error(f"Failed to get model details: {str(e)}")
+            return None    
+    
+    def get_latest_version_model(self, version_prefix):
+        """
+        Get the latest model for a specific version prefix from the blockchain.
+        
+        Args:
+            version_prefix: Version prefix to check (e.g., "1.0")
+            
+        Returns:
+            Model details or None if not found
+        """
+        try:
+            result = self.contract.functions.getLatestModel(version_prefix).call()
+            
+            model = {
+                'modelId': result[0],
+                'ipfsHash': result[1],
+                'round': result[2],
+                'version': result[3],
+                'timestamp': result[4],
+                'participatingClients': result[5]
+            }
+            
+            return model
+        except Exception as e:
+            logging.error(f"Failed to get latest model for version {version_prefix}: {str(e)}")
+            return None
+    
     ################################
     # REWARDING ALLOCATION
     ################################
@@ -1042,7 +1406,7 @@ class BlockchainConnector:
         func = self.contract.functions.finalizeRoundRewardPool(round_num)
         return self._send_transaction(func)
     
-    def allocate_rewards_for_round(self, round_num: int) -> str:
+    def allocate_rewards_for_round(self, round_num):
         """
         Allocate rewards for a specific round.
         
@@ -1052,28 +1416,12 @@ class BlockchainConnector:
         Returns:
             Transaction hash
         """
-        func = self.contract.functions.allocateRewardsForRound(round_num)
-        return self._send_transaction(func)
-    
-    def get_round_reward_pool(self, round_num: int) -> Dict[str, Any]:
-        """
-        Get details about a round's reward pool.
-        
-        Args:
-            round_num: Round number
-            
-        Returns:
-            Dictionary with pool details
-        """
-        total_amount, allocated_amount, remaining_amount, is_finalized = \
-            self.contract.functions.getRoundRewardPool(round_num).call()
-        
-        return {
-            "total_amount": self.web3.from_wei(total_amount, 'ether'),
-            "allocated_amount": self.web3.from_wei(allocated_amount, 'ether'),
-            "remaining_amount": self.web3.from_wei(remaining_amount, 'ether'),
-            "is_finalized": is_finalized
-    }
+        try:
+            function_args = [round_num]
+            return self.send_blockchain_transaction("allocateRewardsForRound", function_args)
+        except Exception as e:
+            logging.error(f"Failed to allocate rewards for round {round_num}: {str(e)}")
+            return None 
         
     def _send_transaction(self, func, value=0):
         """
@@ -1110,3 +1458,23 @@ class BlockchainConnector:
         # Wait for transaction to be mined
         receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
         return receipt.transactionHash.hex()
+    
+    
+    ################################
+    # LOGGING
+    ################################
+    def _log_transaction_metrics(self, **kwargs):
+        """Log transaction metrics to file for monitoring dashboard"""
+        timestamp = datetime.datetime.now().isoformat()
+        metrics = {
+            'timestamp': timestamp,
+            **kwargs
+        }
+        
+        # Ensure directory exists
+        os.makedirs('metrics/blockchain', exist_ok=True)
+        
+        # Append to metrics file
+        metrics_file = 'metrics/blockchain/transaction_metrics.jsonl'
+        with open(metrics_file, 'a') as f:
+            f.write(json.dumps(metrics) + '\n')

@@ -1,62 +1,71 @@
 [
   {
     "round": 1,
-    "fit_loss": 0.25649881424297666,
-    "accuracy": 68.18181818181819,
+    "fit_loss": 0.3186512056625251,
+    "accuracy": 66.66666666666667,
     "ensemble_weights": [
-      0.07437699760955868,
-      0.3694688807777983,
-      0.3509212018557745,
-      0.2052329197568685
+      0.051085168316247404,
+      0.20541996983894342,
+      0.6651487972247793,
+      0.07834606462002992
     ],
-    "ipfs_hash": "QmbUnNT7pRSW8HHZarUXCqxcZ4khEmjRWfnTzADCtwCDLA",
-    "wallet_address": "0x7977DF953E85DedcA20Ae78c8a659D216aA396CB",
-    "timestamp": "2025-05-02T07:58:08.069072+00:00"
+    "ipfs_hash": "QmR7NFUBaH3FiJj4ds1zt2UwkyE4V8fv9hvXoSXX8mbRv4",
+    "wallet_address": "0x864E1f107762b549071c3b946f27a6BE78EdeE5E",
+    "timestamp": "2025-05-08T15:00:06.329248+00:00"
   },
   {
     "round": 1,
-    "eval_loss": 0.2595192088646758,
-    "accuracy": 66.66666666666667,
+    "eval_loss": 0.3973332101648504,
+    "accuracy": 59.09090909090909,
     "eval_samples": 66,
-    "ipfs_hash": "QmfFedResb6zsgytojkjxF21N4zkQCbpJuTzHomrFoh8td",
-    "wallet_address": "0x7977DF953E85DedcA20Ae78c8a659D216aA396CB",
-    "timestamp": "2025-05-02T07:58:10.816762+00:00"
+    "ipfs_hash": "QmRZS8YaK7HBfcvUTTTdCGPi5z4ftC8NZ8mUJxJrC7BdWE",
+    "wallet_address": "0x864E1f107762b549071c3b946f27a6BE78EdeE5E",
+    "timestamp": "2025-05-08T15:00:08.760580+00:00"
   },
   {
     "round": 2,
-    "fit_loss": 0.25602855011256354,
-    "accuracy": 68.18181818181819,
+    "fit_loss": 0.39330072565512225,
+    "accuracy": 57.57575757575758,
     "ensemble_weights": [
-      0.44979300044716364,
-      0.015049850675116673,
-      0.36777108754284066,
-      0.16738606133487913
+      0.0591952390655006,
+      0.17443570072607462,
+      0.5491517693718913,
+      0.21721729083653363
     ],
-    "ipfs_hash": "QmS82so5vmSiRqHbnmdJRHfKTjtzCQoY1CBXDVQeNtGSwq",
-    "wallet_address": "0x7977DF953E85DedcA20Ae78c8a659D216aA396CB",
-    "timestamp": "2025-05-02T07:58:12.046737+00:00"
+    "ipfs_hash": "QmZs3bAi9BHknXFdh9hcWu7PL5fm7dZYSrwJUFXHF3vGjH",
+    "wallet_address": "0x864E1f107762b549071c3b946f27a6BE78EdeE5E",
+    "timestamp": "2025-05-08T15:00:10.886019+00:00"
   },
   {
     "round": 2,
-    "eval_loss": 0.26299139578248176,
-    "accuracy": 66.66666666666667,
+    "eval_loss": 0.4046307729952263,
+    "accuracy": 56.06060606060606,
     "eval_samples": 66,
-    "ipfs_hash": "QmTQ4hpWBqomPuzWknoVBK2YJusuxxhS4PwJHM9b44zL4W",
-    "wallet_address": "0x7977DF953E85DedcA20Ae78c8a659D216aA396CB",
-    "timestamp": "2025-05-02T07:58:12.350657+00:00"
+    "ipfs_hash": "QmTKCZStaGvo5V4bDebAjtzm4Tz4kK4kbu3rdZ4gAstUdE",
+    "wallet_address": "0x864E1f107762b549071c3b946f27a6BE78EdeE5E",
+    "timestamp": "2025-05-08T15:00:11.350571+00:00"
   },
   {
     "round": 3,
-    "fit_loss": 0.25721444852057507,
-    "accuracy": 68.18181818181819,
+    "fit_loss": 0.5668503082159794,
+    "accuracy": 50.0,
     "ensemble_weights": [
-      0.3200857072719264,
-      0.08985736664509841,
-      0.32445374130465016,
-      0.26560318477832495
+      0.020989431323155592,
+      0.1202851081130235,
+      0.41694520204006275,
+      0.44178025852375813
     ],
-    "ipfs_hash": "QmUkYJyAjNeogfgVXYvDygTAU5HhHpTxg2BSYsJnT2HaTH",
-    "wallet_address": "0x7977DF953E85DedcA20Ae78c8a659D216aA396CB",
-    "timestamp": "2025-05-02T07:58:13.607606+00:00"
+    "ipfs_hash": "QmPdq9XoSRhKpKEd73Hj5UoEFxmyX9phDk8YzrgQzf4cbF",
+    "wallet_address": "0x864E1f107762b549071c3b946f27a6BE78EdeE5E",
+    "timestamp": "2025-05-08T15:00:13.490064+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 0.4161265203447053,
+    "accuracy": 57.57575757575758,
+    "eval_samples": 66,
+    "ipfs_hash": "QmZqLRWmPJpvbcHNgWPJAqRJNCJ8GJ1GqJw7SDx89P2ahU",
+    "wallet_address": "0x864E1f107762b549071c3b946f27a6BE78EdeE5E",
+    "timestamp": "2025-05-08T15:00:13.835625+00:00"
   }
 ]

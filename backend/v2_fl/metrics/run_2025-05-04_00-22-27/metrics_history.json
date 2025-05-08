@@ -1,0 +1,107 @@
+[
+  {
+    "round": 1,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 4,
+      "model_names": "lr,meta_lr,rf,svc",
+      "ensemble_weights": [
+        0.03876638239358342,
+        0.16692482482540544,
+        0.5612890645584953,
+        0.23301972822251593
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-03T17:22:56.231669+00:00"
+  },
+  {
+    "round": 1,
+    "eval_loss": 0.4233787953853607,
+    "eval_metrics": {
+      "ensemble_size": 4.0,
+      "accuracy": 58.333333333333336,
+      "loss": 0.42337879357915936,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 58.333333333333336
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-03T17:22:56.535998+00:00"
+  },
+  {
+    "round": 2,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 4,
+      "model_names": "lr,meta_lr,rf,svc",
+      "ensemble_weights": [
+        0.03670228280452279,
+        0.3130486191250037,
+        0.44954518467371285,
+        0.20070391339676072
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-03T17:23:00.779471+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": 0.4250497967004776,
+    "eval_metrics": {
+      "ensemble_size": 4.0,
+      "accuracy": 53.78787878787879,
+      "loss": 0.42504978496016876,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 53.78787878787879
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-03T17:23:01.121087+00:00"
+  },
+  {
+    "round": 3,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 4,
+      "model_names": "lr,meta_lr,rf,svc",
+      "ensemble_weights": [
+        0.0362087044057964,
+        0.1850804102569787,
+        0.5529573932817069,
+        0.22575349205551798
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-03T17:23:04.775192+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 0.4185023009777069,
+    "eval_metrics": {
+      "ensemble_size": 4.0,
+      "accuracy": 59.84848484848485,
+      "loss": 0.41850229691375385,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 59.84848484848485
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-03T17:23:05.020597+00:00"
+  }
+]

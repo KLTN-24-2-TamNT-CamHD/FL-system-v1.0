@@ -1,0 +1,7 @@
+{
+  "provider_url": "http://192.168.1.146:7545",
+  "private_key": "0xe6fefd5bdf1f22c50ad84dbde500cdf15b558c29c9b8c84f417cf7ed2b286934",
+  "contract_address": "0x8e12169F51F3949a4b66eB09813F4b419e14e44e",
+  "contract_abi_path": "contracts/Federation.json",
+  "ipfs_api": "/ip4/127.0.0.1/tcp/5001"
+}

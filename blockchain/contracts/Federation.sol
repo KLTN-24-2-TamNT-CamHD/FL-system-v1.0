@@ -2,42 +2,42 @@
 pragma solidity ^0.8.0;
 
 contract Federation {
-    // Model structure
+    // Gas-optimized Model structure with smaller uint types
     struct Model {
         string ipfsHash;
-        uint256 round;
+        uint32 round;
         string version;
-        uint256 timestamp;
-        uint256 participatingClients;
+        uint64 timestamp;
+        uint32 participatingClients;
         address publisher;
         bool isActive;
     }
     
-    // Client contribution structure
+    // Gas-optimized Client contribution structure
     struct ClientContribution {
-        uint256 contributionCount;
-        uint256 totalScore;
+        uint32 contributionCount;
+        uint96 totalScore;
         bool isAuthorized;
-        uint256 lastContributionTimestamp;
-        uint256 rewardsEarned;
+        uint64 lastContributionTimestamp;
+        uint96 rewardsEarned;
         bool rewardsClaimed;
     }
     
-    // Contribution record structure
+    // Gas-optimized Contribution record structure
     struct ContributionRecord {
         address clientAddress;
-        uint256 round;
+        uint32 round;
         string ipfsHash;
-        uint256 accuracy;
-        uint256 timestamp;
-        uint256 score;
+        uint32 accuracy;
+        uint64 timestamp;
+        uint32 score;
         bool rewarded;
     }
     
-    // Round reward pool structure
+    // Gas-optimized Round reward pool structure
     struct RoundRewardPool {
-        uint256 totalAmount;
-        uint256 allocatedAmount;
+        uint128 totalAmount;
+        uint128 allocatedAmount;
         bool isFinalized;
     }
     
@@ -45,10 +45,16 @@ contract Federation {
     mapping(bytes32 => Model) public models;
     
     // Model IDs by round
-    mapping(uint256 => bytes32[]) public modelsByRound;
+    mapping(uint32 => bytes32[]) public modelsByRound;
     
     // Latest model ID for each version prefix
     mapping(string => bytes32) public latestVersions;
+
+    // Track total number of models
+    uint256 public totalModelCount;
+
+    // Track all model IDs in an array for easier access
+    bytes32[] public allModelIds;
     
     // Client registry
     mapping(address => ClientContribution) public clientRegistry;
@@ -56,86 +62,87 @@ contract Federation {
     // Authorized client addresses
     address[] public authorizedClients;
     
-    // Contribution records by client address
-    mapping(address => ContributionRecord[]) public contributionRecords;
+    // Contribution records by client address - using mapping instead of array
+    mapping(address => mapping(uint32 => ContributionRecord)) public clientContributions;
+    mapping(address => uint32) public clientContributionCount;
     
-    // Contributions by round
-    mapping(uint256 => ContributionRecord[]) public roundContributions;
+    // Contributions by round - using mapping instead of array for gas efficiency
+    mapping(uint32 => mapping(uint32 => ContributionRecord)) public roundContributions;
+    mapping(uint32 => uint32) public roundContributionCount;
     
     // Reward pools by round
-    mapping(uint256 => RoundRewardPool) public roundRewardPools;
+    mapping(uint32 => RoundRewardPool) public roundRewardPools;
     
     // Total rewards allocated
-    uint256 public totalRewardsAllocated;
+    uint128 public totalRewardsAllocated;
     
     // Total rewards claimed
-    uint256 public totalRewardsClaimed;
+    uint128 public totalRewardsClaimed;
     
     // Current contract balance
-    uint256 public contractBalance;
+    uint128 public contractBalance;
     
     // Events
-    event ModelRegistered(bytes32 indexed modelId, string ipfsHash, uint256 round, string version);
-    event ModelUpdated(bytes32 indexed modelId, string ipfsHash, uint256 round, string version);
+    event ModelRegistered(bytes32 indexed modelId, string ipfsHash, uint32 round, string version);
+    event ModelUpdated(bytes32 indexed modelId, string ipfsHash, uint32 round, string version);
     event ModelDeactivated(bytes32 indexed modelId);
     event ClientAuthorized(address indexed clientAddress);
     event ClientDeauthorized(address indexed clientAddress);
-    event ContributionRecorded(address indexed clientAddress, uint256 round, uint256 score);
-    event RewardAllocated(address indexed clientAddress, uint256 amount, uint256 round);
-    event RewardClaimed(address indexed clientAddress, uint256 amount);
-    event RewardPoolFunded(uint256 indexed round, uint256 amount);
-    event RewardPoolFinalized(uint256 indexed round, uint256 totalAmount);
-    event ContractFunded(address indexed from, uint256 amount);
-    event EmergencyWithdrawal(address indexed to, uint256 amount);
+    event ContributionRecorded(address indexed clientAddress, uint32 round, uint32 score);
+    event RewardAllocated(address indexed clientAddress, uint128 amount, uint32 round);
+    event RewardClaimed(address indexed clientAddress, uint128 amount);
+    event RewardPoolFunded(uint32 indexed round, uint128 amount);
+    event RewardPoolFinalized(uint32 indexed round, uint128 totalAmount);
+    event ContractFunded(address indexed from, uint128 amount);
+    event EmergencyWithdrawal(address indexed to, uint128 amount);
     
     // Owner of the contract
     address public owner;
     
     constructor() {
         owner = msg.sender;
-        contractBalance = 0;
     }
     
     // Modifier to restrict certain functions to the owner
     modifier onlyOwner() {
-        require(msg.sender == owner, "Only the owner can call this function");
+        require(msg.sender == owner, "Not owner");
         _;
     }
     
     // Receive function to allow the contract to receive ETH
     receive() external payable {
-        contractBalance += msg.value;
-        emit ContractFunded(msg.sender, msg.value);
+        contractBalance += uint128(msg.value);
+        emit ContractFunded(msg.sender, uint128(msg.value));
     }
     
     // Fallback function
     fallback() external payable {
-        contractBalance += msg.value;
-        emit ContractFunded(msg.sender, msg.value);
+        contractBalance += uint128(msg.value);
+        emit ContractFunded(msg.sender, uint128(msg.value));
     }
     
     // Function to fund the contract
     function fundContract() external payable {
-        contractBalance += msg.value;
-        emit ContractFunded(msg.sender, msg.value);
+        contractBalance += uint128(msg.value);
+        emit ContractFunded(msg.sender, uint128(msg.value));
     }
     
     // Function to fund a specific round's reward pool
-    function fundRoundRewardPool(uint256 round) external payable onlyOwner {
-        require(msg.value > 0, "Funding amount must be greater than zero");
+    function fundRoundRewardPool(uint32 round) external payable onlyOwner {
+        require(msg.value > 0, "Zero funding");
         
         RoundRewardPool storage pool = roundRewardPools[round];
-        pool.totalAmount += msg.value;
-        contractBalance += msg.value;
+        pool.totalAmount += uint128(msg.value);
+        contractBalance += uint128(msg.value);
         
-        emit RewardPoolFunded(round, msg.value);
+        emit RewardPoolFunded(round, uint128(msg.value));
     }
     
     // Finalize a round's reward pool (prevents additional funding)
-    function finalizeRoundRewardPool(uint256 round) external onlyOwner {
+    function finalizeRoundRewardPool(uint32 round) external onlyOwner {
         RoundRewardPool storage pool = roundRewardPools[round];
-        require(pool.totalAmount > 0, "Reward pool is empty");
-        require(!pool.isFinalized, "Reward pool is already finalized");
+        require(pool.totalAmount > 0, "Empty pool");
+        require(!pool.isFinalized, "Already finalized");
         
         pool.isFinalized = true;
         
@@ -143,33 +150,33 @@ contract Federation {
     }
     
     // Generate a unique model ID from the IPFS hash and round
-    function generateModelId(string memory ipfsHash, uint256 round) public pure returns (bytes32) {
+    function generateModelId(string calldata ipfsHash, uint32 round) public pure returns (bytes32) {
         return keccak256(abi.encodePacked(ipfsHash, round));
     }
     
-
     //////////////////////////////////////////////////////////
     ///////////   MODEL MANAGEMENT FUNCTIONS  ////////////////
     //////////////////////////////////////////////////////////
-    // Register a new model
+    
+    // Register a new model - using calldata instead of memory for parameters
     function registerModel(
-        string memory ipfsHash, 
-        uint256 round, 
-        string memory version,
-        uint256 participatingClients
-    ) public returns (bytes32) {
+        string calldata ipfsHash, 
+        uint32 round, 
+        string calldata version,
+        uint32 participatingClients
+    ) external returns (bytes32) {
         // Generate model ID
         bytes32 modelId = generateModelId(ipfsHash, round);
         
         // Ensure it doesn't already exist
-        require(models[modelId].timestamp == 0, "Model already exists");
+        require(models[modelId].timestamp == 0, "Model exists");
         
         // Store the model
         models[modelId] = Model({
             ipfsHash: ipfsHash,
             round: round,
             version: version,
-            timestamp: block.timestamp,
+            timestamp: uint64(block.timestamp),
             participatingClients: participatingClients,
             publisher: msg.sender,
             isActive: true
@@ -181,9 +188,12 @@ contract Federation {
         // Update latest version
         string memory versionPrefix = getVersionPrefix(version);
         
+        allModelIds.push(modelId);
+        totalModelCount++;
+
         // If there's no latest version for this prefix or this one is newer
         if (latestVersions[versionPrefix] == bytes32(0) || 
-            compareVersions(version, getVersionFromModelId(latestVersions[versionPrefix]))) {
+            compareVersions(version, models[latestVersions[versionPrefix]].version)) {
             latestVersions[versionPrefix] = modelId;
         }
         
@@ -195,21 +205,20 @@ contract Federation {
     
     // Update an existing model by round
     function updateModelByRound(
-        string memory ipfsHash, 
-        uint256 round, 
-        string memory version,
-        uint256 participatingClients
-    ) public onlyOwner returns (bytes32) {
+        string calldata ipfsHash, 
+        uint32 round, 
+        string calldata version,
+        uint32 participatingClients
+    ) external onlyOwner returns (bytes32) {
         // Check if any model exists for this round
-        require(modelsByRound[round].length > 0, "No models exist for this round");
+        require(modelsByRound[round].length > 0, "No models for round");
         
         // Generate new model ID
         bytes32 modelId = generateModelId(ipfsHash, round);
         
         // Check if this specific model already exists
         if (models[modelId].timestamp > 0) {
-            // Model with this exact hash and round already exists
-            // Just return the existing ID
+            // Model already exists
             return modelId;
         }
         
@@ -218,7 +227,7 @@ contract Federation {
             ipfsHash: ipfsHash,
             round: round,
             version: version,
-            timestamp: block.timestamp,
+            timestamp: uint64(block.timestamp),
             participatingClients: participatingClients,
             publisher: msg.sender,
             isActive: true
@@ -232,7 +241,7 @@ contract Federation {
         
         // If there's no latest version for this prefix or this one is newer
         if (latestVersions[versionPrefix] == bytes32(0) || 
-            compareVersions(version, getVersionFromModelId(latestVersions[versionPrefix]))) {
+            compareVersions(version, models[latestVersions[versionPrefix]].version)) {
             latestVersions[versionPrefix] = modelId;
         }
         
@@ -243,16 +252,16 @@ contract Federation {
     }
 
     // Get the latest model for a specific version prefix
-    function getLatestModel(string memory versionPrefix) public view returns (
+    function getLatestModel(string calldata versionPrefix) external view returns (
         bytes32 modelId,
         string memory ipfsHash,
-        uint256 round,
+        uint32 round,
         string memory version,
-        uint256 timestamp,
-        uint256 participatingClients
+        uint64 timestamp,
+        uint32 participatingClients
     ) {
         bytes32 id = latestVersions[versionPrefix];
-        require(id != bytes32(0), "No models for this version prefix");
+        require(id != bytes32(0), "No models for version");
         
         Model storage model = models[id];
         return (
@@ -266,21 +275,21 @@ contract Federation {
     }
     
     // Get all models for a specific round
-    function getModelsByRound(uint256 round) public view returns (bytes32[] memory) {
+    function getModelsByRound(uint32 round) external view returns (bytes32[] memory) {
         return modelsByRound[round];
     }
     
     // Get the most recent model for a specific round
-    function getLatestModelByRound(uint256 round) public view returns (
+    function getLatestModelByRound(uint32 round) external view returns (
         bytes32 modelId,
         string memory ipfsHash,
         string memory version,
-        uint256 timestamp,
-        uint256 participatingClients,
+        uint64 timestamp,
+        uint32 participatingClients,
         address publisher,
         bool isActive
     ) {
-        require(modelsByRound[round].length > 0, "No models for this round");
+        require(modelsByRound[round].length > 0, "No models for round");
         
         // Get the last model in the array (most recently added)
         bytes32 id = modelsByRound[round][modelsByRound[round].length - 1];
@@ -298,17 +307,17 @@ contract Federation {
     }
     
     // Get model details
-    function getModelDetails(bytes32 modelId) public view returns (
+    function getModelDetails(bytes32 modelId) external view returns (
         string memory ipfsHash,
-        uint256 round,
+        uint32 round,
         string memory version,
-        uint256 timestamp,
-        uint256 participatingClients,
+        uint64 timestamp,
+        uint32 participatingClients,
         address publisher,
         bool isActive
     ) {
         Model storage model = models[modelId];
-        require(model.timestamp > 0, "Model does not exist");
+        require(model.timestamp > 0, "Model not exist");
         
         return (
             model.ipfsHash,
@@ -319,6 +328,103 @@ contract Federation {
             model.publisher,
             model.isActive
         );
+    }
+
+    // Get models with pagination
+    // This function is optimized for gas by using arrays instead of mappings
+    function getModels(uint256 offset, uint256 limit) external view returns (
+        bytes32[] memory modelIds,
+        string[] memory ipfsHashes,
+        uint32[] memory rounds,
+        uint64[] memory timestamps,
+        uint32[] memory participatingClients,
+        bool[] memory isActive
+    ) {
+        // Calculate actual number of records to return
+        uint256 count = (offset >= totalModelCount) ? 0 : (
+            ((offset + limit) > totalModelCount) ? (totalModelCount - offset) : limit
+        );
+        
+        // Initialize arrays
+        modelIds = new bytes32[](count);
+        ipfsHashes = new string[](count);
+        rounds = new uint32[](count);
+        timestamps = new uint64[](count);
+        participatingClients = new uint32[](count);
+        isActive = new bool[](count);
+        
+        // Fill arrays with model data
+        for (uint256 i = 0; i < count; i++) {
+            bytes32 modelId = allModelIds[offset + i];
+            Model storage model = models[modelId];
+            
+            modelIds[i] = modelId;
+            ipfsHashes[i] = model.ipfsHash;
+            rounds[i] = model.round;
+            timestamps[i] = model.timestamp;
+            participatingClients[i] = model.participatingClients;
+            isActive[i] = model.isActive;
+        }
+        
+        return (modelIds, ipfsHashes, rounds, timestamps, participatingClients, isActive);
+    }
+
+    // Get total model count
+    function getModelCount() external view returns (uint256) {
+        return totalModelCount;
+    }
+    // Function to get all models for visualization
+    function getAllModels() external view returns (
+        bytes32[] memory modelIds,
+        string[] memory ipfsHashes,
+        uint32[] memory rounds,
+        uint64[] memory timestamps,
+        uint32[] memory participatingClients,
+        bool[] memory isActive
+    ) {
+        // First, determine how many total models we have by counting all rounds
+        uint256 totalModels = 0;
+        uint32 maxRound = 0;
+        
+        // Find the maximum round number
+        for (uint32 i = 0; i < 1000; i++) { // Assume maximum 1000 rounds for safety
+            if (modelsByRound[i].length > 0) {
+                totalModels += modelsByRound[i].length;
+                if (i > maxRound) maxRound = i;
+            }
+        }
+        
+        // Initialize arrays with the correct size
+        modelIds = new bytes32[](totalModels);
+        ipfsHashes = new string[](totalModels);
+        rounds = new uint32[](totalModels);
+        timestamps = new uint64[](totalModels);
+        participatingClients = new uint32[](totalModels);
+        isActive = new bool[](totalModels);
+        
+        // Fill arrays with model data
+        uint256 index = 0;
+        
+        // Iterate through all rounds
+        for (uint32 round = 0; round <= maxRound; round++) {
+            bytes32[] memory roundModels = modelsByRound[round];
+            
+            for (uint256 j = 0; j < roundModels.length; j++) {
+                bytes32 modelId = roundModels[j];
+                Model storage model = models[modelId];
+                
+                modelIds[index] = modelId;
+                ipfsHashes[index] = model.ipfsHash;
+                rounds[index] = model.round;
+                timestamps[index] = model.timestamp;
+                participatingClients[index] = model.participatingClients;
+                isActive[index] = model.isActive;
+                
+                index++;
+            }
+        }
+        
+        return (modelIds, ipfsHashes, rounds, timestamps, participatingClients, isActive);
     }
     
     // Get version prefix (e.g., "1.0" from "1.0.3")
@@ -350,7 +456,6 @@ contract Federation {
     // Compare versions (returns true if v1 is newer than v2)
     function compareVersions(string memory v1, string memory v2) internal pure returns (bool) {
         // Simple string comparison - assumes properly formatted semantic versions
-        // In a production environment, this would parse and compare version components
         bytes memory b1 = bytes(v1);
         bytes memory b2 = bytes(v2);
         
@@ -363,17 +468,10 @@ contract Federation {
         return b1.length > b2.length;
     }
     
-    // Get the version from a model ID
-    function getVersionFromModelId(bytes32 modelId) public view returns (string memory) {
-        return models[modelId].version;
-    }
-    
-    
-    
     // Deactivate a model (e.g., if it's found to be problematic)
-    function deactivateModel(bytes32 modelId) public onlyOwner {
-        require(models[modelId].timestamp > 0, "Model does not exist");
-        require(models[modelId].isActive, "Model is already inactive");
+    function deactivateModel(bytes32 modelId) external onlyOwner {
+        require(models[modelId].timestamp > 0, "Model not exist");
+        require(models[modelId].isActive, "Already inactive");
         
         models[modelId].isActive = false;
         
@@ -381,11 +479,12 @@ contract Federation {
     }
     
     //////////////////////////////////////////////////////////
-    ///////////   CLIENT MANAGEMENT FUNCTIONS  ////////////////
+    ///////////   CLIENT MANAGEMENT FUNCTIONS  ///////////////
     //////////////////////////////////////////////////////////
+    
     // Authorize a client to participate in federated learning
     function authorizeClient(address clientAddress) public onlyOwner {
-        require(clientAddress != address(0), "Invalid client address");
+        require(clientAddress != address(0), "Invalid address");
         
         ClientContribution storage client = clientRegistry[clientAddress];
         
@@ -398,24 +497,24 @@ contract Federation {
     }
     
     // Authorize multiple clients at once
-    function authorizeClients(address[] memory clientAddresses) public onlyOwner {
+    function authorizeClients(address[] calldata clientAddresses) external onlyOwner {
         for (uint i = 0; i < clientAddresses.length; i++) {
             authorizeClient(clientAddresses[i]);
         }
     }
     
-    // Deauthorize a client
-    function deauthorizeClient(address clientAddress) public onlyOwner {
-        require(clientRegistry[clientAddress].isAuthorized, "Client is not authorized");
+    // Deauthorize a client - more gas efficient implementation
+    function deauthorizeClient(address clientAddress) external onlyOwner {
+        require(clientRegistry[clientAddress].isAuthorized, "Not authorized");
         
         clientRegistry[clientAddress].isAuthorized = false;
         
-        // Remove from authorized clients array
-        // This is an inefficient implementation but works for moderate numbers of clients
-        for (uint i = 0; i < authorizedClients.length; i++) {
+        // Find and remove from authorized clients array using a more gas efficient approach
+        uint256 length = authorizedClients.length;
+        for (uint i = 0; i < length; i++) {
             if (authorizedClients[i] == clientAddress) {
-                // Move the last element to this position and pop the last element
-                authorizedClients[i] = authorizedClients[authorizedClients.length - 1];
+                // Swap with the last element and pop
+                authorizedClients[i] = authorizedClients[length - 1];
                 authorizedClients.pop();
                 break;
             }
@@ -425,74 +524,290 @@ contract Federation {
     }
     
     // Check if a client is authorized
-    function isClientAuthorized(address clientAddress) public view returns (bool) {
+    function isClientAuthorized(address clientAddress) external view returns (bool) {
         return clientRegistry[clientAddress].isAuthorized;
     }
     
     // Get all authorized clients
-    function getAllAuthorizedClients() public view returns (address[] memory) {
+    function getAllAuthorizedClients() external view returns (address[] memory) {
         return authorizedClients;
+    }
+    
+    //////////////////////////////////////////////////////////
+    ///////////   CONTRIBUTION MANAGEMENT  //////////////////
+    //////////////////////////////////////////////////////////
+    
+    // Record a client's contribution - more gas efficient
+    function recordContribution(
+        address clientAddress,
+        uint32 round,
+        string calldata ipfsHash,
+        uint32 accuracy // Accuracy multiplied by 10000 (e.g., 95.67% = 9567)
+    ) external returns (uint32) {
+        // Only owner or the client itself can record a contribution
+        require(msg.sender == owner || msg.sender == clientAddress, "Not authorized");
+        
+        // Check if client is authorized
+        require(clientRegistry[clientAddress].isAuthorized, "Not authorized");
+        
+        // Calculate contribution score (simplified for gas)
+        uint32 score = accuracy / 100;
+        
+        // Create contribution record using mappings instead of arrays
+        uint32 clientIndex = clientContributionCount[clientAddress];
+        uint32 roundIndex = roundContributionCount[round];
+        
+        // Store in client contributions mapping
+        clientContributions[clientAddress][clientIndex] = ContributionRecord({
+            clientAddress: clientAddress,
+            round: round,
+            ipfsHash: ipfsHash,
+            accuracy: accuracy,
+            timestamp: uint64(block.timestamp),
+            score: score,
+            rewarded: false
+        });
+        
+        // Store in round contributions mapping
+        roundContributions[round][roundIndex] = ContributionRecord({
+            clientAddress: clientAddress,
+            round: round,
+            ipfsHash: ipfsHash,
+            accuracy: accuracy,
+            timestamp: uint64(block.timestamp),
+            score: score,
+            rewarded: false
+        });
+        
+        // Increment counters
+        clientContributionCount[clientAddress]++;
+        roundContributionCount[round]++;
+        
+        // Update client metrics
+        ClientContribution storage client = clientRegistry[clientAddress];
+        client.contributionCount++;
+        client.totalScore += score;
+        client.lastContributionTimestamp = uint64(block.timestamp);
+        
+        emit ContributionRecorded(clientAddress, round, score);
+        
+        return score;
+    }
+    
+    // Get client contribution details
+    function getClientContribution(address clientAddress) external view returns (
+        uint32 contributionCount,
+        uint96 totalScore,
+        bool isAuthorized,
+        uint64 lastContributionTimestamp,
+        uint96 rewardsEarned,
+        bool rewardsClaimed
+    ) {
+        ClientContribution storage client = clientRegistry[clientAddress];
+        return (
+            client.contributionCount,
+            client.totalScore,
+            client.isAuthorized,
+            client.lastContributionTimestamp,
+            client.rewardsEarned,
+            client.rewardsClaimed
+        );
+    }
+    
+    // Get client contribution records - with pagination for gas efficiency
+    function getClientContributionRecords(
+        address clientAddress, 
+        uint32 offset, 
+        uint32 limit
+    ) external view returns (
+        uint32[] memory rounds,
+        uint32[] memory accuracies,
+        uint32[] memory scores,
+        uint64[] memory timestamps,
+        bool[] memory rewarded
+    ) {
+        uint32 total = clientContributionCount[clientAddress];
+        
+        // Calculate actual number of records to return
+        uint32 count = (offset >= total) ? 0 : (
+            ((offset + limit) > total) ? (total - offset) : limit
+        );
+        
+        // Initialize arrays
+        rounds = new uint32[](count);
+        accuracies = new uint32[](count);
+        scores = new uint32[](count);
+        timestamps = new uint64[](count);
+        rewarded = new bool[](count);
+        
+        // Populate arrays
+        for (uint32 i = 0; i < count; i++) {
+            ContributionRecord storage record = clientContributions[clientAddress][offset + i];
+            rounds[i] = record.round;
+            accuracies[i] = record.accuracy;
+            scores[i] = record.score;
+            timestamps[i] = record.timestamp;
+            rewarded[i] = record.rewarded;
+        }
+        
+        return (rounds, accuracies, scores, timestamps, rewarded);
+    }
+    
+    // Get contributions for a specific round - with pagination
+    function getRoundContributions(
+        uint32 round,
+        uint32 offset,
+        uint32 limit
+    ) external view returns (
+        address[] memory clients,
+        uint32[] memory accuracies,
+        uint32[] memory scores,
+        bool[] memory rewarded
+    ) {
+        uint32 total = roundContributionCount[round];
+        
+        // Calculate actual number of records to return
+        uint32 count = (offset >= total) ? 0 : (
+            ((offset + limit) > total) ? (total - offset) : limit
+        );
+        
+        // Initialize arrays
+        clients = new address[](count);
+        accuracies = new uint32[](count);
+        scores = new uint32[](count);
+        rewarded = new bool[](count);
+        
+        // Populate arrays
+        for (uint32 i = 0; i < count; i++) {
+            ContributionRecord storage record = roundContributions[round][offset + i];
+            clients[i] = record.clientAddress;
+            accuracies[i] = record.accuracy;
+            scores[i] = record.score;
+            rewarded[i] = record.rewarded;
+        }
+        
+        return (clients, accuracies, scores, rewarded);
     }
     
     //////////////////////////////////////////////////////////
     ///////////   REWARD MANAGEMENT FUNCTIONS  ///////////////
     //////////////////////////////////////////////////////////
     
-    // Allocate rewards to clients based on their contributions for a round
-    function allocateRewardsForRound(uint256 round) public onlyOwner {
-        ContributionRecord[] storage contributions = roundContributions[round];
-        require(contributions.length > 0, "No contributions for this round");
+    // Batch allocate rewards to clients - more gas efficient
+    function allocateRewardsForRound(uint32 round) external onlyOwner {
+        uint32 count = roundContributionCount[round];
+        require(count > 0, "No contributions");
         
         RoundRewardPool storage pool = roundRewardPools[round];
-        require(pool.totalAmount > 0, "No rewards available for this round");
-        require(pool.isFinalized, "Reward pool must be finalized before allocation");
+        require(pool.totalAmount > 0, "No rewards");
+        require(pool.isFinalized, "Not finalized");
         
-        // Calculate total score
-        uint256 totalScore = 0;
-        for (uint i = 0; i < contributions.length; i++) {
-            if (!contributions[i].rewarded) {
-                totalScore += contributions[i].score;
+        // Calculate in a separate function
+        (uint256 totalScore, uint32 unrewarded) = calculateRoundScores(round, count);
+        
+        require(totalScore > 0, "Zero total score");
+        require(unrewarded > 0, "All rewarded");
+        
+        uint256 availableRewards = pool.totalAmount - pool.allocatedAmount;
+        require(availableRewards > 0, "No available rewards");
+        
+        // Process batches using a separate function
+        processRewardBatches(round, count, unrewarded, totalScore, availableRewards, pool);
+    }
+
+    // Extract calculations to reduce variable count
+    function calculateRoundScores(uint32 round, uint32 count) internal view returns (uint256 totalScore, uint32 unrewarded) {
+        totalScore = 0;
+        unrewarded = 0;
+        
+        for (uint32 i = 0; i < count; i++) {
+            ContributionRecord storage contribution = roundContributions[round][i];
+            if (!contribution.rewarded) {
+                totalScore += contribution.score;
+                unrewarded++;
             }
         }
         
-        require(totalScore > 0, "Total score is zero");
+        return (totalScore, unrewarded);
+    }
+
+    // Process rewards in a separate function
+    function processRewardBatches(
+        uint32 round, 
+        uint32 count, 
+        uint32 unrewarded, 
+        uint256 totalScore, 
+        uint256 availableRewards,
+        RoundRewardPool storage pool
+    ) internal {
+        uint32 batchSize = 10;
+        uint32 processedCount = 0;
         
-        uint256 availableRewards = pool.totalAmount - pool.allocatedAmount;
-        require(availableRewards > 0, "All rewards for this round have been allocated");
+        while (processedCount < unrewarded && processedCount < count) {
+            uint32 currentBatch = (unrewarded - processedCount) < batchSize ? 
+                                (unrewarded - processedCount) : batchSize;
+            
+            processRewardBatch(round, count, currentBatch, totalScore, availableRewards, pool);
+            processedCount += currentBatch;
+        }
+    }
+
+    // Process a single batch
+    function processRewardBatch(
+        uint32 round,
+        uint32 count,
+        uint32 batchSize,
+        uint256 totalScore,
+        uint256 availableRewards,
+        RoundRewardPool storage pool
+    ) internal {
+        uint32 batchProcessed = 0;
         
-        // Allocate and transfer rewards in one step
-        for (uint i = 0; i < contributions.length; i++) {
-            if (!contributions[i].rewarded) {
-                ContributionRecord storage contribution = contributions[i];
-                
-                // Calculate reward amount
-                uint256 rewardAmount = (contribution.score * availableRewards) / totalScore;
-                
-                // Update contribution record
-                contribution.rewarded = true;
-                
-                // Update reward pool
-                pool.allocatedAmount += rewardAmount;
-                contractBalance -= rewardAmount;
-                
-                // Transfer ETH directly to the client
-                (bool success, ) = payable(contribution.clientAddress).call{value: rewardAmount}("");
-                require(success, "Transfer failed");
-                
-                emit RewardAllocated(contribution.clientAddress, rewardAmount, round);
+        for (uint32 i = 0; i < count && batchProcessed < batchSize; i++) {
+            ContributionRecord storage contribution = roundContributions[round][i];
+            
+            if (!contribution.rewarded) {
+                processContributionReward(contribution, round, totalScore, availableRewards, pool);
+                batchProcessed++;
             }
         }
     }
+
+    // Process a single contribution's reward
+    function processContributionReward(
+        ContributionRecord storage contribution,
+        uint32 round,
+        uint256 totalScore,
+        uint256 availableRewards,
+        RoundRewardPool storage pool
+    ) internal {
+        // Calculate reward amount
+        uint128 rewardAmount = uint128((uint256(contribution.score) * availableRewards) / totalScore);
+        
+        // Update contribution record
+        contribution.rewarded = true;
+        
+        // Update reward pool
+        pool.allocatedAmount += rewardAmount;
+        contractBalance -= rewardAmount;
+        
+        // Transfer ETH directly to the client
+        (bool success, ) = payable(contribution.clientAddress).call{value: rewardAmount}("");
+        require(success, "Transfer failed");
+        
+        // Emit event with fewer variables in scope
+        emit RewardAllocated(contribution.clientAddress, rewardAmount, round);
+    }
     
     // Allow client to claim rewards (transfers actual ETH)
-    function claimRewards() public {
+    function claimRewards() external {
         ClientContribution storage client = clientRegistry[msg.sender];
-        require(client.isAuthorized, "Client is not authorized");
-        require(client.rewardsEarned > 0, "No rewards to claim");
-        require(!client.rewardsClaimed, "Rewards already claimed");
+        require(client.isAuthorized, "Not authorized");
+        require(client.rewardsEarned > 0, "No rewards");
+        require(!client.rewardsClaimed, "Already claimed");
         
-        uint256 amount = client.rewardsEarned;
-        require(amount <= contractBalance, "Insufficient contract balance");
+        uint128 amount = client.rewardsEarned;
+        require(amount <= contractBalance, "Insufficient balance");
         
         // Mark rewards as claimed before transfer to prevent reentrancy
         client.rewardsClaimed = true;
@@ -507,7 +822,7 @@ contract Federation {
     }
     
     // Get available rewards for a client
-    function getAvailableRewards(address clientAddress) public view returns (uint256) {
+    function getAvailableRewards(address clientAddress) external view returns (uint96) {
         ClientContribution storage client = clientRegistry[clientAddress];
         if (!client.isAuthorized || client.rewardsClaimed) {
             return 0;
@@ -516,8 +831,8 @@ contract Federation {
     }
     
     // Emergency withdrawal function for the owner
-    function emergencyWithdraw(uint256 amount) public onlyOwner {
-        require(amount <= contractBalance, "Insufficient contract balance");
+    function emergencyWithdraw(uint128 amount) external onlyOwner {
+        require(amount <= contractBalance, "Insufficient balance");
         
         contractBalance -= amount;
         
@@ -528,133 +843,11 @@ contract Federation {
         emit EmergencyWithdrawal(owner, amount);
     }
     
-
-    //////////////////////////////////////////////////////////
-    ////////  CONTRIBUTION MANAGEMENT FUNCTIONS  /////////////
-    //////////////////////////////////////////////////////////
-        // Record a client's contribution
-    function recordContribution(
-        address clientAddress,
-        uint256 round,
-        string memory ipfsHash,
-        uint256 accuracy // Accuracy multiplied by 10000 (e.g., 95.67% = 9567)
-    ) public returns (uint256) {
-        // Only owner or the client itself can record a contribution
-        require(msg.sender == owner || msg.sender == clientAddress, "Not authorized to record contribution");
-        
-        // Check if client is authorized
-        require(clientRegistry[clientAddress].isAuthorized, "Client is not authorized");
-        
-        // Calculate contribution score (can be modified with more complex formulas)
-        // Simple linear scoring: score = accuracy / 100 (to get a 0-100 scale)
-        uint256 score = accuracy / 100;
-        
-        // Create contribution record
-        ContributionRecord memory record = ContributionRecord({
-            clientAddress: clientAddress,
-            round: round,
-            ipfsHash: ipfsHash,
-            accuracy: accuracy,
-            timestamp: block.timestamp,
-            score: score,
-            rewarded: false
-        });
-        
-        // Add to client's contribution records
-        contributionRecords[clientAddress].push(record);
-        
-        // Add to round contributions
-        roundContributions[round].push(record);
-        
-        // Update client metrics
-        ClientContribution storage client = clientRegistry[clientAddress];
-        client.contributionCount++;
-        client.totalScore += score;
-        client.lastContributionTimestamp = block.timestamp;
-        
-        emit ContributionRecorded(clientAddress, round, score);
-        
-        return score;
-    }
-
-    // Get client contribution details
-    function getClientContribution(address clientAddress) public view returns (
-        uint256 contributionCount,
-        uint256 totalScore,
-        bool isAuthorized,
-        uint256 lastContributionTimestamp,
-        uint256 rewardsEarned,
-        bool rewardsClaimed
-    ) {
-        ClientContribution storage client = clientRegistry[clientAddress];
-        return (
-            client.contributionCount,
-            client.totalScore,
-            client.isAuthorized,
-            client.lastContributionTimestamp,
-            client.rewardsEarned,
-            client.rewardsClaimed
-        );
-    }
-    
-    // Get client contribution records
-    function getClientContributionRecords(address clientAddress) public view returns (
-        uint256[] memory rounds,
-        uint256[] memory accuracies,
-        uint256[] memory scores,
-        uint256[] memory timestamps,
-        bool[] memory rewarded
-    ) {
-        ContributionRecord[] storage records = contributionRecords[clientAddress];
-        uint256 length = records.length;
-        
-        rounds = new uint256[](length);
-        accuracies = new uint256[](length);
-        scores = new uint256[](length);
-        timestamps = new uint256[](length);
-        rewarded = new bool[](length);
-        
-        for (uint i = 0; i < length; i++) {
-            rounds[i] = records[i].round;
-            accuracies[i] = records[i].accuracy;
-            scores[i] = records[i].score;
-            timestamps[i] = records[i].timestamp;
-            rewarded[i] = records[i].rewarded;
-        }
-        
-        return (rounds, accuracies, scores, timestamps, rewarded);
-    }
-    
-    // Get contributions for a specific round
-    function getRoundContributions(uint256 round) public view returns (
-        address[] memory clients,
-        uint256[] memory accuracies,
-        uint256[] memory scores,
-        bool[] memory rewarded
-    ) {
-        ContributionRecord[] storage records = roundContributions[round];
-        uint256 length = records.length;
-        
-        clients = new address[](length);
-        accuracies = new uint256[](length);
-        scores = new uint256[](length);
-        rewarded = new bool[](length);
-        
-        for (uint i = 0; i < length; i++) {
-            clients[i] = records[i].clientAddress;
-            accuracies[i] = records[i].accuracy;
-            scores[i] = records[i].score;
-            rewarded[i] = records[i].rewarded;
-        }
-        
-        return (clients, accuracies, scores, rewarded);
-    }
-    
     // Get round reward pool details
-    function getRoundRewardPool(uint256 round) public view returns (
-        uint256 totalAmount,
-        uint256 allocatedAmount,
-        uint256 remainingAmount,
+    function getRoundRewardPool(uint32 round) external view returns (
+        uint128 totalAmount,
+        uint128 allocatedAmount,
+        uint128 remainingAmount,
         bool isFinalized
     ) {
         RoundRewardPool storage pool = roundRewardPools[round];
@@ -667,13 +860,13 @@ contract Federation {
     }
     
     // Update contract owner
-    function transferOwnership(address newOwner) public onlyOwner {
-        require(newOwner != address(0), "New owner cannot be the zero address");
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Zero address");
         owner = newOwner;
     }
     
     // Get total number of authorized clients
-    function getAuthorizedClientCount() public view returns (uint256) {
+    function getAuthorizedClientCount() external view returns (uint256) {
         return authorizedClients.length;
     }
 }
