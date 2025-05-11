@@ -11,8 +11,6 @@ import torch.nn as nn
 from sklearn.model_selection import KFold
 import logging
 
-from datetime import datetime, timezone
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -82,86 +80,168 @@ class GAStacking:
         
         return population
     
-    def fitness_function(
-        self, weights: np.ndarray, val_data: torch.utils.data.DataLoader
-    ) -> float:
+    def fitness_function(self, weights: np.ndarray, val_data: torch.utils.data.DataLoader) -> float:
         """
-        Calculate fitness (validation accuracy) for a set of weights.
+        Calculate fitness with strict separation of base and meta models.
         
         Args:
             weights: Array of weights for the ensemble
             val_data: Validation data loader
             
         Returns:
-            Fitness score (accuracy)
+            Fitness score
         """
         correct = 0
         total = 0
         total_loss = 0.0
+        
+        # Separate weights for base models and meta-learners
+        base_model_indices = []
+        meta_model_indices = []
+        
+        for i, name in enumerate(self.model_names):
+            if name == "meta_lr" or "meta" in name.lower():
+                meta_model_indices.append(i)
+            else:
+                base_model_indices.append(i)
+        
+        base_weights = weights[base_model_indices]
+        meta_weights = weights[meta_model_indices] if meta_model_indices else []
+        
+        # Normalize weights
+        if len(base_weights) > 0:
+            base_weights = base_weights / np.sum(base_weights)
+        
+        if len(meta_weights) > 0:
+            meta_weights = meta_weights / np.sum(meta_weights)
         
         # Use eval context
         with torch.no_grad():
             for data, targets in val_data:
                 data, targets = data.to(self.device), targets.to(self.device)
                 
-                # First, collect predictions from each model (excluding meta_lr)
-                model_outputs = []
-                base_models = []
-                meta_model = None
+                # 1. Process base models
+                base_outputs = []
+                weighted_base_sum = None
                 
-                for i, model in enumerate(self.base_models):
-                    if self.model_names[i] == "meta_lr" or "MetaLearner" in self.model_names[i]:
-                        meta_model = model
-                        continue
-                        
-                    base_models.append(model)
+                for i, idx in enumerate(base_model_indices):
                     try:
-                        outputs = model(data)
-                        model_outputs.append(outputs)
+                        model = self.base_models[idx]
+                        model.eval()
+                        output = model(data)
+                        
+                        # Ensure tensor
+                        if not isinstance(output, torch.Tensor):
+                            output = torch.tensor(output, dtype=torch.float32, device=self.device)
+                        
+                        # Ensure proper shape
+                        if len(output.shape) == 1:
+                            output = output.unsqueeze(1)
+                        
+                        # Add to base outputs
+                        base_outputs.append(output)
+                        
+                        # Apply weight
+                        if i < len(base_weights):
+                            weight = base_weights[i]
+                            weighted_output = output * weight
+                            
+                            # Add to weighted sum
+                            if weighted_base_sum is None:
+                                weighted_base_sum = weighted_output
+                            else:
+                                weighted_base_sum += weighted_output
                     except Exception as e:
-                        # Log error and continue with a dummy output
-                        print(f"Error in model forward pass for {self.model_names[i]}: {e}")
-                        dummy_output = torch.zeros_like(targets)
-                        model_outputs.append(dummy_output)
+                        print(f"Error in base model forward pass during fitness evaluation: {e}")
+                        # Skip this model
                 
-                # Calculate weighted sum of base model outputs (excluding meta learner)
-                num_base_models = len(model_outputs)
-                if num_base_models == 0:
-                    # No base models to use, return negative infinity
-                    return float('-inf')
-                    
-                # Normalize weights for base models (excluding meta learner weight)
-                base_weights = np.array([w for i, w in enumerate(weights) 
-                                    if self.model_names[i] != "meta_lr" and "MetaLearner" not in self.model_names[i]])
-                if len(base_weights) > 0:
-                    base_weights = base_weights / (np.sum(base_weights) + 1e-10)  # Avoid division by zero
+                # 2. Process meta-learners if we have base outputs
+                weighted_meta_sum = None
                 
-                # Calculate weighted prediction from base models
-                weighted_sum = torch.zeros_like(targets)
-                for i, output in enumerate(model_outputs):
-                    if i < len(base_weights):
-                        weighted_sum += output * base_weights[i]
+                if len(base_outputs) > 0 and len(meta_model_indices) > 0:
+                    try:
+                        # Create meta-learner input
+                        meta_input = torch.cat(base_outputs, dim=1)
+                        
+                        # Process through meta-learners
+                        for i, idx in enumerate(meta_model_indices):
+                            try:
+                                model = self.base_models[idx]
+                                model.eval()
+                                output = model(meta_input)  # Use base model predictions!
+                                
+                                # Ensure tensor
+                                if not isinstance(output, torch.Tensor):
+                                    output = torch.tensor(output, dtype=torch.float32, device=self.device)
+                                
+                                # Ensure proper shape
+                                if len(output.shape) == 1:
+                                    output = output.unsqueeze(1)
+                                
+                                # Apply weight
+                                if i < len(meta_weights):
+                                    weight = meta_weights[i]
+                                    weighted_output = output * weight
+                                    
+                                    # Add to weighted sum
+                                    if weighted_meta_sum is None:
+                                        weighted_meta_sum = weighted_output
+                                    else:
+                                        weighted_meta_sum += weighted_output
+                            except Exception as e:
+                                print(f"Error in meta-learner forward pass during fitness evaluation: {e}")
+                                # Skip this model
+                    except Exception as e:
+                        print(f"Error preparing meta-learner input during fitness evaluation: {e}")
+                        # Skip meta-learners
                 
-                # For regression: calculate MSE
-                if targets.dim() == 1 or targets.size(1) == 1:  # Regression case
-                    mse = torch.mean((weighted_sum - targets) ** 2).item()
+                # 3. Combine outputs
+                final_output = None
+                
+                if weighted_base_sum is not None:
+                    final_output = weighted_base_sum
+                
+                if weighted_meta_sum is not None:
+                    if final_output is None:
+                        final_output = weighted_meta_sum
+                    else:
+                        final_output += weighted_meta_sum
+                
+                # Skip this batch if no valid output
+                if final_output is None:
+                    continue
+                
+                # 4. Calculate metrics
+                # For regression task (fraud detection)
+                if targets.dim() == 1 or targets.size(1) == 1:
+                    # Calculate MSE
+                    mse = torch.mean((final_output - targets) ** 2).item()
                     total_loss += mse * targets.size(0)
-                    # Consider prediction correct if within a threshold
+                    # Count correct predictions (within threshold)
                     threshold = 0.5
-                    correct += torch.sum((torch.abs(weighted_sum - targets) < threshold)).item()
-                # For classification: calculate accuracy
+                    correct += torch.sum((torch.abs(final_output - targets) < threshold)).item()
+                # For classification
                 else:
-                    _, predicted = torch.max(weighted_sum, 1)
+                    _, predicted = torch.max(final_output, 1)
                     _, target_classes = torch.max(targets, 1)
                     correct += (predicted == target_classes).sum().item()
                     
                 total += targets.size(0)
+        
+        # Calculate final fitness
+        if total == 0:
+            return 0.0
             
-            avg_loss = total_loss / total if total > 0 else float('inf')
-            accuracy = correct / total if total > 0 else 0
-            
-            # For regression, we want to minimize loss, so we return negative loss
-            return 1 / avg_loss
+        accuracy = correct / total
+        avg_loss = total_loss / total if total > 0 else float('inf')
+        
+        # Include diversity in fitness
+        weight_diversity = np.std(weights)
+        
+        # Combined fitness (higher is better)
+        combined_fitness = accuracy + (weight_diversity * 0.2)
+        
+        return combined_fitness
     
     def select_parents(
         self, population: List[np.ndarray], fitness_scores: List[float]
@@ -320,10 +400,6 @@ class GAStacking:
                        f"Best Fitness: {current_best_fitness:.4f}, "
                        f"Avg Fitness: {np.mean(fitness_scores):.4f}")
             
-            # Add this line to log for monitoring
-            if hasattr(self, 'client') and hasattr(self.client, 'log_ga_progress'):
-                self.client.log_ga_progress(generation, current_best_fitness, np.mean(fitness_scores))
-            
             # Evolve population
             if generation < self.generations - 1:
                 population = self.evolve_population(population, fitness_scores)
@@ -380,7 +456,7 @@ class EnsembleModel(nn.Module):
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass through the ensemble.
+        Forward pass through the ensemble with strict separation between base models and meta-learners.
         
         Args:
             x: Input tensor
@@ -388,99 +464,130 @@ class EnsembleModel(nn.Module):
         Returns:
             Weighted output from the ensemble
         """
-        # Separate base models from meta learner
-        base_models = []
-        base_model_indices = []
-        meta_model = None
-        meta_model_index = None
+        # Handle non-tensor inputs and ensure consistent dtype
+        if not isinstance(x, torch.Tensor):
+            x = torch.tensor(x, dtype=torch.float32, device=self.device)
+        else:
+            # Ensure consistent dtype to avoid Float/Double issues
+            x = x.to(dtype=torch.float32, device=self.device)
         
-        for i, model in enumerate(self.models):
-            model_name = self.model_names[i] if i < len(self.model_names) else ""
-            if model_name == "meta_lr" or "meta" in model_name.lower():
-                meta_model = model
-                meta_model_index = i
+        # 1. First identify base models and meta-learners
+        base_models = []
+        base_weights = []
+        base_model_indices = []
+        meta_models = []
+        meta_weights = []
+        meta_model_indices = []
+        
+        for i, (model, name) in enumerate(zip(self.models, self.model_names)):
+            if name == "meta_lr" or "meta" in name.lower():
+                meta_models.append(model)
+                meta_weights.append(self.weights[i])
+                meta_model_indices.append(i)
             else:
                 base_models.append(model)
+                base_weights.append(self.weights[i])
                 base_model_indices.append(i)
         
-        # If no meta model, just use weighted average of base models
-        if meta_model is None:
-            outputs = []
-            for model in self.models:
-                try:
-                    output = model(x)
-                    outputs.append(output)
-                except Exception as e:
-                    print(f"Error in model forward pass: {str(e)}")
-                    dummy_output = torch.zeros((x.size(0), 1), device=self.device)
-                    outputs.append(dummy_output)
-            
-            # Weight the outputs
-            weighted_sum = torch.zeros_like(outputs[0]) if outputs else torch.zeros((x.size(0), 1), device=self.device)
-            for i, output in enumerate(outputs):
-                if i < len(self.weights):
-                    weighted_sum += output * self.weights[i]
-            
-            return weighted_sum
+        # 2. CRITICAL SECTION: PROCESS BASE MODELS FIRST
+        base_model_outputs = []
+        weighted_base_outputs = None
         
-        # If we have a meta model, run base models first
-        base_outputs = []
-        for model in base_models:
+        for i, model in enumerate(base_models):
             try:
-                output = model(x)
-                base_outputs.append(output)
-            except Exception as e:
-                print(f"Error in base model forward pass: {str(e)}")
-                dummy_output = torch.zeros((x.size(0), 1), device=self.device)
-                base_outputs.append(dummy_output)
-        
-        # If we have base outputs, try to run meta model
-        if base_outputs:
-            try:
-                # Stack outputs if there are multiple
-                if len(base_outputs) > 1:
-                    stacked_base_outputs = torch.cat(base_outputs, dim=1)
-                else:
-                    stacked_base_outputs = base_outputs[0]
-                
-                # Run meta model
-                meta_output = meta_model(stacked_base_outputs)
-                
-                # Weight meta output with other base outputs
-                meta_weight = self.weights[meta_model_index]
-                base_weight_sum = sum(self.weights[i] for i in base_model_indices)
-                
-                if base_weight_sum > 0:
-                    # Weighted combination of meta and base outputs
-                    base_combined = torch.zeros_like(base_outputs[0])
-                    for i, idx in enumerate(base_model_indices):
-                        base_combined += base_outputs[i] * (self.weights[idx] / base_weight_sum)
+                # Process input through base model
+                with torch.no_grad():
+                    model.eval()
+                    base_output = model(x)
                     
-                    result = meta_output * meta_weight + base_combined * (1 - meta_weight)
-                    return result
-                else:
-                    # Just use meta output
-                    return meta_output
-                
+                    # Ensure output is proper tensor and shape
+                    if not isinstance(base_output, torch.Tensor):
+                        base_output = torch.tensor(base_output, dtype=torch.float32, device=self.device)
+                    
+                    if len(base_output.shape) == 1:
+                        base_output = base_output.unsqueeze(1)
+                    
+                    # Store for meta-learner input
+                    base_model_outputs.append(base_output)
+                    
+                    # Apply weight and add to weighted sum
+                    weight = base_weights[i]
+                    weighted_output = base_output * weight
+                    
+                    if weighted_base_outputs is None:
+                        weighted_base_outputs = weighted_output
+                    else:
+                        weighted_base_outputs += weighted_output
             except Exception as e:
-                print(f"Error in meta model forward pass: {str(e)}")
-                # Fall back to base models
+                logger.error(f"Error in base model forward pass: {e}")
+                # Skip this model
         
-        # If we get here, either meta model failed or we have no base outputs
-        # Fall back to weighted base outputs
-        weighted_sum = torch.zeros_like(base_outputs[0]) if base_outputs else torch.zeros((x.size(0), 1), device=self.device)
-        total_weight = 0.0
+        # If we have no valid base model outputs, return zeros
+        if not base_model_outputs:
+            return torch.zeros((x.size(0), 1), dtype=torch.float32, device=self.device)
         
-        for i, idx in enumerate(base_model_indices):
-            if i < len(base_outputs):
-                weight = self.weights[idx]
-                weighted_sum += base_outputs[i] * weight
-                total_weight += weight
+        # 3. NOW PROCESS META-LEARNERS WITH BASE MODEL OUTPUTS
+        weighted_meta_outputs = None
         
-        if total_weight > 0:
-            weighted_sum = weighted_sum / total_weight
+        if meta_models and len(base_model_outputs) > 0:
+            try:
+                # Concatenate base model outputs for meta-learner input
+                # This creates a tensor of shape [batch_size, num_base_models]
+                meta_learner_input = torch.cat(base_model_outputs, dim=1)
+                
+                # Explicitly log the dimensions to verify
+                logger.info(f"Meta-learner input shape: {meta_learner_input.shape} - correct format for meta-learners")
+                
+                # Process through each meta-learner
+                for i, model in enumerate(meta_models):
+                    try:
+                        # Forward pass with base model outputs ONLY
+                        with torch.no_grad():
+                            model.eval()
+                            meta_output = model(meta_learner_input)
+                            
+                            # Ensure proper shape
+                            if not isinstance(meta_output, torch.Tensor):
+                                meta_output = torch.tensor(meta_output, dtype=torch.float32, device=self.device)
+                            
+                            if len(meta_output.shape) == 1:
+                                meta_output = meta_output.unsqueeze(1)
+                            
+                            # Apply weight
+                            weight = meta_weights[i]
+                            weighted_output = meta_output * weight
+                            
+                            # Add to weighted sum
+                            if weighted_meta_outputs is None:
+                                weighted_meta_outputs = weighted_output
+                            else:
+                                weighted_meta_outputs += weighted_output
+                    except Exception as e:
+                        logger.error(f"Error in meta-learner forward pass: {e}")
+                        # Skip this meta-learner
+            except Exception as e:
+                logger.error(f"Error preparing meta-learner input: {e}")
+                # Skip meta-learners entirely
         
-        return weighted_sum
+        # 4. COMBINE OUTPUTS
+        final_output = None
+        
+        # Add base model outputs if available
+        if weighted_base_outputs is not None:
+            final_output = weighted_base_outputs
+        
+        # Add meta-learner outputs if available
+        if weighted_meta_outputs is not None:
+            if final_output is None:
+                final_output = weighted_meta_outputs
+            else:
+                final_output += weighted_meta_outputs
+        
+        # Return zeros if no valid outputs
+        if final_output is None:
+            return torch.zeros((x.size(0), 1), dtype=torch.float32, device=self.device)
+        
+        return final_output
     
     def get_weights(self) -> Dict[str, float]:
         """
@@ -490,47 +597,3 @@ class EnsembleModel(nn.Module):
             Dictionary mapping model names to weights
         """
         return {name: float(weight) for name, weight in zip(self.model_names, self.weights)}
-    
-    def get_state_dict(self) -> dict:
-        """
-        Get a serializable state dictionary of the ensemble model.
-        
-        Returns:
-            Dictionary containing the ensemble state
-        """
-        # Convert weights to a serializable format
-        if hasattr(self.weights, 'cpu'):
-            # Handle PyTorch tensor
-            weights = self.weights.cpu().numpy().tolist()
-        elif hasattr(self.weights, 'tolist'):
-            # Handle numpy array
-            weights = self.weights.tolist()
-        else:
-            # Handle Python list or other format
-            weights = self.weights
-        
-        # Include model names if available
-        model_names = self.model_names if hasattr(self, 'model_names') else [f"model_{i}" for i in range(len(self.models))]
-        
-        # Get input and output dimensions if available from the first model
-        input_dim = None
-        output_dim = None
-        if self.models and hasattr(self.models[0], 'input_dim'):
-            input_dim = self.models[0].input_dim
-        if self.models and hasattr(self.models[0], 'output_dim'):
-            output_dim = self.models[0].output_dim
-        
-        # Create the state dictionary
-        ensemble_state = {
-            "weights": weights,
-            "model_names": model_names,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-        # Add dimensions if available
-        if input_dim is not None:
-            ensemble_state["input_dim"] = input_dim
-        if output_dim is not None:
-            ensemble_state["output_dim"] = output_dim
-        
-        return ensemble_state

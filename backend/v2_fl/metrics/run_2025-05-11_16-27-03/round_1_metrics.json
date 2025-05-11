@@ -1,0 +1,17 @@
+{
+  "round": 1,
+  "eval_loss": 0.22893618047237396,
+  "eval_metrics": {
+    "ensemble_size": 3.0,
+    "accuracy": 65.15151515151516,
+    "loss": 0.22893617821462225,
+    "num_clients": 1,
+    "num_trusted_clients": 1,
+    "total_clients": 1,
+    "authorized_clients": 1,
+    "unauthorized_clients": 0,
+    "avg_accuracy": 65.15151515151516
+  },
+  "num_clients": 1,
+  "timestamp": "2025-05-11T09:27:52.313739+00:00"
+}

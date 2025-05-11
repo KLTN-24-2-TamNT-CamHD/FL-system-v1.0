@@ -1,0 +1,131 @@
+{
+  "ensemble_state": {
+    "model_parameters": [
+      {
+        "estimator": "lr",
+        "input_dim": 9,
+        "output_dim": 1,
+        "coef": [
+          [
+            0.1,
+            0.2,
+            0.1,
+            0.3,
+            0.2,
+            0.1,
+            0.4,
+            0.1,
+            0.3
+          ]
+        ],
+        "intercept": [
+          0.0102
+        ]
+      },
+      {
+        "estimator": "svc",
+        "input_dim": 9,
+        "output_dim": 1,
+        "dual_coef": [
+          [
+            0.4321,
+            -0.4321
+          ]
+        ],
+        "support_vectors": [
+          [
+            1.1,
+            2.2,
+            3.3,
+            4.4,
+            5.5,
+            6.6,
+            7.7,
+            8.8,
+            9.9
+          ],
+          [
+            9.9,
+            8.8,
+            7.7,
+            6.6,
+            5.5,
+            4.4,
+            3.3,
+            2.2,
+            1.1
+          ]
+        ],
+        "intercept": [
+          0.5
+        ]
+      },
+      {
+        "estimator": "rf",
+        "input_dim": 9,
+        "output_dim": 1,
+        "n_estimators": 100,
+        "feature_importances": [
+          0.12,
+          0.05,
+          0.15,
+          0.1,
+          0.2,
+          0.18,
+          0.1,
+          0.05,
+          0.05
+        ]
+      },
+      {
+        "estimator": "meta_lr",
+        "input_dim": 3,
+        "meta_input_dim": 3,
+        "output_dim": 1,
+        "coef": [
+          [
+            0.33,
+            0.33,
+            0.34
+          ]
+        ],
+        "intercept": [
+          -0.82
+        ]
+      }
+    ],
+    "weights": [
+      0.33,
+      0.33,
+      0.34,
+      0.0
+    ],
+    "model_names": [
+      "lr",
+      "svc",
+      "rf",
+      "meta_lr"
+    ]
+  },
+  "info": {
+    "round": 1,
+    "timestamp": "2025-05-11T09:53:21.833849+00:00",
+    "version": "1.0.0511-7201.1",
+    "version_data": {
+      "version": "1.0.0511-7201.1",
+      "base_version": "1.0",
+      "session_id": 1746957201,
+      "session_tag": "0511-7201",
+      "round": 1,
+      "timestamp": "2025-05-11T09:53:21.833821+00:00"
+    },
+    "is_ensemble": true,
+    "num_models": 4,
+    "model_names": [
+      "lr",
+      "svc",
+      "rf",
+      "meta_lr"
+    ]
+  }
+}

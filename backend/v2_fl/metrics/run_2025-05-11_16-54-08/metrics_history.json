@@ -1,0 +1,104 @@
+[
+  {
+    "round": 1,
+    "metrics": {
+      "num_ensembles": 1,
+      "num_models": 3,
+      "model_names": "lr,meta_lr,svc",
+      "ensemble_weights": [
+        0.4643583993425052,
+        0.2449693799363274,
+        0.2906722207211675
+      ],
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-05-11T09:54:11.556523+00:00"
+  },
+  {
+    "round": 1,
+    "eval_loss": 0.2286359816789627,
+    "eval_metrics": {
+      "ensemble_size": 3.0,
+      "accuracy": 65.15151515151516,
+      "loss": 0.22863598122741235,
+      "num_clients": 1,
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 65.15151515151516
+    },
+    "num_clients": 1,
+    "timestamp": "2025-05-11T09:54:11.751407+00:00"
+  },
+  {
+    "round": 2,
+    "metrics": {
+      "num_ensembles": 1,
+      "num_models": 3,
+      "model_names": "lr,meta_lr,svc",
+      "ensemble_weights": [
+        0.430148921080426,
+        0.30266391550341937,
+        0.2671871634161546
+      ],
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-05-11T09:54:12.694969+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": 0.22714684903621674,
+    "eval_metrics": {
+      "ensemble_size": 3.0,
+      "accuracy": 65.15151515151516,
+      "loss": 0.22714685039086777,
+      "num_clients": 1,
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 65.15151515151516
+    },
+    "num_clients": 1,
+    "timestamp": "2025-05-11T09:54:12.856415+00:00"
+  },
+  {
+    "round": 3,
+    "metrics": {
+      "num_ensembles": 1,
+      "num_models": 3,
+      "model_names": "lr,meta_lr,svc",
+      "ensemble_weights": [
+        0.43529677520482385,
+        0.2925935845038216,
+        0.2721096402913546
+      ],
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-05-11T09:54:13.824226+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 0.22728043794631958,
+    "eval_metrics": {
+      "ensemble_size": 3.0,
+      "accuracy": 65.15151515151516,
+      "loss": 0.22728043162461484,
+      "num_clients": 1,
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 65.15151515151516
+    },
+    "num_clients": 1,
+    "timestamp": "2025-05-11T09:54:13.963732+00:00"
+  }
+]

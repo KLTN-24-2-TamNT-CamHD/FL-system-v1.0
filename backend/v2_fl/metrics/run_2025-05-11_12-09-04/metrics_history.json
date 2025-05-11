@@ -1,0 +1,116 @@
+[
+  {
+    "round": 1,
+    "metrics": {
+      "avg_precision": 0.0,
+      "avg_recall": 0.0,
+      "avg_f1_score": 0.0,
+      "avg_auc": 0.0,
+      "fraud_detection_score": 0.0,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 0,
+      "ga_stacking_score_range": 0,
+      "ga_stacking_reward_participants": 0
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-11T05:11:01.035969+00:00"
+  },
+  {
+    "round": 1,
+    "eval_loss": 0.033141277730464935,
+    "eval_metrics": {
+      "ensemble_size": 7.0,
+      "accuracy": 99.8,
+      "loss": 0.033141278694570064,
+      "num_clients": 2,
+      "avg_precision": 0.0,
+      "avg_recall": 0.0,
+      "avg_f1_score": 0.0,
+      "avg_auc": 0.0,
+      "fraud_detection_score": 0.0,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-11T05:11:02.357265+00:00"
+  },
+  {
+    "round": 2,
+    "metrics": {
+      "avg_precision": 0.0,
+      "avg_recall": 0.0,
+      "avg_f1_score": 0.0,
+      "avg_auc": 0.0,
+      "fraud_detection_score": 0.0,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 0,
+      "ga_stacking_score_range": 0,
+      "ga_stacking_reward_participants": 0
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-11T05:12:46.265287+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": 0.029265910387039185,
+    "eval_metrics": {
+      "ensemble_size": 7.0,
+      "accuracy": 99.805,
+      "loss": 0.02926591039001942,
+      "num_clients": 2,
+      "avg_precision": 0.0,
+      "avg_recall": 0.0,
+      "avg_f1_score": 0.0,
+      "avg_auc": 0.0,
+      "fraud_detection_score": 0.0,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-11T05:12:47.326852+00:00"
+  },
+  {
+    "round": 3,
+    "metrics": {
+      "avg_precision": 0.0,
+      "avg_recall": 0.0,
+      "avg_f1_score": 0.0,
+      "avg_auc": 0.0,
+      "fraud_detection_score": 0.0,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 0,
+      "ga_stacking_score_range": 0,
+      "ga_stacking_reward_participants": 0
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-11T05:14:24.378715+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 0.02762947790324688,
+    "eval_metrics": {
+      "ensemble_size": 7.0,
+      "accuracy": 99.81,
+      "loss": 0.02762947844862938,
+      "num_clients": 2,
+      "avg_precision": 0.0,
+      "avg_recall": 0.0,
+      "avg_f1_score": 0.0,
+      "avg_auc": 0.0,
+      "fraud_detection_score": 0.0,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-11T05:14:25.433287+00:00"
+  }
+]

@@ -1,0 +1,122 @@
+[
+  {
+    "round": 1,
+    "metrics": {
+      "num_ensembles": 1,
+      "num_trusted_ensembles": 1,
+      "trusted_percentage": 100.0,
+      "num_models": 3,
+      "model_names": "lr,meta_lr,svc",
+      "ensemble_weights": [
+        0.40786264901761304,
+        0.3372995214462049,
+        0.254837829536182
+      ],
+      "aggregation_method": "trimmed_mean",
+      "trusted_clients": "4e887338a8184af0a785814022139b8c",
+      "reputation_4e887338a8184af0a785814022139b8c": 0.71,
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-05-11T09:33:31.078519+00:00"
+  },
+  {
+    "round": 1,
+    "eval_loss": 0.22710086405277252,
+    "eval_metrics": {
+      "ensemble_size": 3.0,
+      "accuracy": 65.15151515151516,
+      "loss": 0.22710086901982626,
+      "num_clients": 1,
+      "num_trusted_clients": 1,
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 65.15151515151516
+    },
+    "num_clients": 1,
+    "timestamp": "2025-05-11T09:33:31.245715+00:00"
+  },
+  {
+    "round": 2,
+    "metrics": {
+      "num_ensembles": 1,
+      "num_trusted_ensembles": 1,
+      "trusted_percentage": 100.0,
+      "num_models": 3,
+      "model_names": "lr,meta_lr,svc",
+      "ensemble_weights": [
+        0.5205438314184885,
+        0.15423507805385336,
+        0.3252210905276581
+      ],
+      "aggregation_method": "trimmed_mean",
+      "trusted_clients": "4e887338a8184af0a785814022139b8c",
+      "reputation_4e887338a8184af0a785814022139b8c": 0.75,
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-05-11T09:33:32.096023+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": 0.23453763127326968,
+    "eval_metrics": {
+      "ensemble_size": 3.0,
+      "accuracy": 65.15151515151516,
+      "loss": 0.23453763578877304,
+      "num_clients": 1,
+      "num_trusted_clients": 1,
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 65.15151515151516
+    },
+    "num_clients": 1,
+    "timestamp": "2025-05-11T09:33:32.269709+00:00"
+  },
+  {
+    "round": 3,
+    "metrics": {
+      "num_ensembles": 1,
+      "num_trusted_ensembles": 1,
+      "trusted_percentage": 100.0,
+      "num_models": 3,
+      "model_names": "lr,meta_lr,svc",
+      "ensemble_weights": [
+        0.4463765755823002,
+        0.27544625676684104,
+        0.27817716765085887
+      ],
+      "aggregation_method": "trimmed_mean",
+      "trusted_clients": "4e887338a8184af0a785814022139b8c",
+      "reputation_4e887338a8184af0a785814022139b8c": 0.7900000000000001,
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0
+    },
+    "num_clients": 1,
+    "timestamp": "2025-05-11T09:33:33.171744+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 0.22762897610664368,
+    "eval_metrics": {
+      "ensemble_size": 3.0,
+      "accuracy": 65.15151515151516,
+      "loss": 0.2276289797190464,
+      "num_clients": 1,
+      "num_trusted_clients": 1,
+      "total_clients": 1,
+      "authorized_clients": 1,
+      "unauthorized_clients": 0,
+      "avg_accuracy": 65.15151515151516
+    },
+    "num_clients": 1,
+    "timestamp": "2025-05-11T09:33:33.305586+00:00"
+  }
+]

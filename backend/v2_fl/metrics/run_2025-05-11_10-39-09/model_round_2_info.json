@@ -1,0 +1,31 @@
+{
+  "model_id": "0x18490986cb5cdb1f7cbbc82772b990e45e7cc3919cac1b321e206d8f8d9df4e6",
+  "ipfs_hash": "QmckW6UfeJupKuMcT1HZH97YerkcU6yPXJm1qw4qsmv8bZ",
+  "round": "1.0.0511-4749.2",
+  "version": 1746934800,
+  "timestamp": 0,
+  "participating_clients": "0x8c11123e02617Fda3B2bD8691B9965796b7c1257",
+  "model_info": {
+    "round": 2,
+    "timestamp": "2025-05-11T03:40:00.726187+00:00",
+    "version": "1.0.0511-4749.2",
+    "version_data": {
+      "version": "1.0.0511-4749.2",
+      "base_version": "1.0",
+      "session_id": 1746934749,
+      "session_tag": "0511-4749",
+      "round": 2,
+      "timestamp": "2025-05-11T03:40:00.726179+00:00"
+    },
+    "is_ensemble": true,
+    "task_type": "fraud_detection",
+    "num_models": 5,
+    "model_names": [
+      "gbm",
+      "lr",
+      "meta_lr",
+      "rf",
+      "svc"
+    ]
+  }
+}

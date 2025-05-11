@@ -1,0 +1,14 @@
+{
+  "model_id": "0x65ab597be6dc8bc85a9c38739b86a5b37f436c7ddf8e97c0054d418b90b47098",
+  "ipfs_hash": "QmStrTRK5f61ghTmc7TRAvM4NeA1BFD8vUfriZgLG8KiAj",
+  "round": "1.0.0511-0144.3",
+  "version": 1746940367,
+  "timestamp": 0,
+  "participating_clients": "0x8c11123e02617Fda3B2bD8691B9965796b7c1257",
+  "model_info": {
+    "round": 3,
+    "timestamp": "2025-05-11T05:12:47.327657+00:00",
+    "version": "1.0.0511-0144.3",
+    "is_ensemble": false
+  }
+}

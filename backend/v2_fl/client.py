@@ -12,10 +12,19 @@ import logging
 from pathlib import Path
 from datetime import datetime, timezone
 from sklearn.model_selection import train_test_split
-import hashlib
 
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+import torch.utils.data
+from torch.utils.data import DataLoader, Dataset
 
+import random
+import threading
+from web3.exceptions import TransactionNotFound
+from hexbytes import HexBytes
 import pandas as pd
+
 import flwr as fl
 import torch
 import torch.nn as nn
@@ -126,9 +135,6 @@ class GAStackingClient(fl.client.NumPyClient):
                     logger.warning("The server may reject this client's contributions")
             except Exception as e:
                 logger.error(f"Failed to verify client authorization: {e}")
-        
-        self.log_system_status()
-
     
     def split_train_val(self, validation_split: float = 0.2):
         """
@@ -333,8 +339,60 @@ class GAStackingClient(fl.client.NumPyClient):
         except Exception as e:
             logger.error(f"Failed to set individual parameters: {e}")
     
+    def _create_models_from_server_configs(self, configs, input_dim, output_dim, device):
+        """Create models specifically matched to server config types."""
+        models = []
+        model_names = []
+        
+        for config in configs:
+            model_type = config.get("estimator", "")
+            
+            # Ensure dimensions are correct
+            model_input_dim = config.get("input_dim", input_dim)
+            model_output_dim = config.get("output_dim", output_dim) 
+            
+            # Create the appropriate model type
+            if model_type == "lr":
+                model = LinearRegressionWrapper(model_input_dim, model_output_dim)
+            elif model_type == "svc":
+                model = SVCWrapper(model_input_dim, model_output_dim)
+            elif model_type == "rf":
+                model = RandomForestWrapper(model_input_dim, model_output_dim)
+            elif model_type == "xgb":
+                # Fall back to GradientBoosting if XGBoost not implemented
+                model = GradientBoostingWrapper(model_input_dim, model_output_dim)
+            elif model_type == "lgbm":
+                # Fall back to GradientBoosting if LightGBM not implemented 
+                model = GradientBoostingWrapper(model_input_dim, model_output_dim)
+            elif model_type == "catboost":
+                # Fall back to GradientBoosting if CatBoost not implemented
+                model = GradientBoostingWrapper(model_input_dim, model_output_dim)
+            elif model_type == "knn":
+                # Fall back to LinearRegression for KNN
+                model = LinearRegressionWrapper(model_input_dim, model_output_dim)
+            elif model_type == "meta_lr":
+                # Meta-learner has special input dimension handling
+                model = MetaLearnerWrapper(model_input_dim, model_output_dim)
+            else:
+                # Default fallback
+                model = LinearModel(model_input_dim, model_output_dim)
+            
+            # Set model parameters if available
+            if hasattr(model, 'set_parameters'):
+                try:
+                    model.set_parameters(config)
+                except Exception as e:
+                    logger.warning(f"Error setting parameters for {model_type}: {e}")
+            
+            # Add to lists
+            model.to(device)
+            models.append(model)
+            model_names.append(model_type)
+            
+        return models, model_names
+    
     def set_parameters_from_ipfs(self, ipfs_hash: str) -> None:
-        """Set model parameters from IPFS."""
+        """Set model parameters from IPFS with improved model type handling."""
         try:
             # Get model data from IPFS
             model_data = self.ipfs.get_json(ipfs_hash)
@@ -368,19 +426,20 @@ class GAStackingClient(fl.client.NumPyClient):
                     
                     # Then process meta learner configs
                     for config in meta_configs:
-                        # Meta learner should have input dim equal to number of base models
+                        # CRITICAL FIX: Meta learner should have input dim equal to number of base models
                         config["input_dim"] = len(base_configs)
                         config["meta_input_dim"] = len(base_configs)  # For backward compatibility
+                        config["expected_input_dim"] = len(base_configs)  # For our improved MetaLearnerWrapper
                         if "output_dim" not in config:
                             config["output_dim"] = self.output_dim
                     
                     # Combine all configs again
                     all_configs = base_configs + meta_configs
                     
-                    # Initialize models from configurations with enforced dimensions
-                    self.base_models, self.model_names = create_model_ensemble_from_config(
+                    # Initialize models using specialized function for server configs
+                    self.base_models, self.model_names = self._create_models_from_server_configs(
                         all_configs,
-                        input_dim=self.input_dim,  # This will be respected by base models
+                        input_dim=self.input_dim,
                         output_dim=self.output_dim,
                         device=self.device
                     )
@@ -401,48 +460,6 @@ class GAStackingClient(fl.client.NumPyClient):
                     )
                     
                     logger.info(f"Ensemble model loaded from IPFS: {ipfs_hash}")
-                    logger.info(f"Model dimensions - Input: {self.input_dim}, Output: {self.output_dim}")
-                    
-                elif "model_state_dicts" in ensemble_state:
-                    # Legacy format with state dicts - handle similarly with special meta learner case
-                    state_dicts = ensemble_state["model_state_dicts"]
-                    model_names = ensemble_state.get("model_names", [])
-                    
-                    # Separate base models and meta learners
-                    base_dicts = []
-                    meta_dicts = []
-                    base_names = []
-                    meta_names = []
-                    
-                    for i, state_dict in enumerate(state_dicts):
-                        name = model_names[i] if i < len(model_names) else f"model_{i}"
-                        model_type = state_dict.get("estimator", state_dict.get("model_type", ""))
-                        
-                        if model_type == "meta_lr" or "MetaLearner" in name:
-                            meta_dicts.append(state_dict)
-                            meta_names.append(name)
-                        else:
-                            base_dicts.append(state_dict)
-                            base_names.append(name)
-                    
-                    # Update meta learner dimensions
-                    for state_dict in meta_dicts:
-                        state_dict["input_dim"] = len(base_dicts)
-                        state_dict["meta_input_dim"] = len(base_dicts)
-                    
-                    # Combine back
-                    all_dicts = base_dicts + meta_dicts
-                    all_names = base_names + meta_names
-                    
-                    # Create modified ensemble state
-                    modified_state = {
-                        "model_state_dicts": all_dicts,
-                        "model_names": all_names,
-                        "weights": ensemble_state.get("weights", [1.0/len(all_dicts)] * len(all_dicts))
-                    }
-                    
-                    self.set_parameters_from_ensemble_state(modified_state)
-                    logger.info(f"Ensemble model (legacy format) loaded from IPFS: {ipfs_hash}")
                 
             elif model_data and "state_dict" in model_data:
                 # Legacy format - single model
@@ -510,47 +527,136 @@ class GAStackingClient(fl.client.NumPyClient):
         
         return ipfs_hash
     
-    def train_ensemble(self, validation_split: float = 0.2) -> EnsembleModel:
-        """
-        Train the ensemble using GA-Stacking.
+    def train_ensemble(self, validation_split: float = 0.2):
+        """Train the ensemble using GA-Stacking with proper meta-learner handling."""
+        # Split data into train and validation
+        train_loader, val_loader = self.split_train_val(validation_split)
         
-        Args:
-            validation_split: Fraction of training data to use for validation
-            
-        Returns:
-            Trained ensemble model
-        """
-        # Separate and handle meta learner models
+        # Separate models
         base_models = []
         meta_models = []
         base_model_names = []
         meta_model_names = []
         
-        for i, model in enumerate(self.base_models):
-            if isinstance(model, MetaLearnerWrapper) or self.model_names[i] == "meta_lr":
+        for i, (model, name) in enumerate(zip(self.base_models, self.model_names)):
+            if name == "meta_lr" or "MetaLearner" in name or "meta" in name.lower():
                 meta_models.append(model)
-                meta_model_names.append(self.model_names[i])
+                meta_model_names.append(name)
             else:
                 base_models.append(model)
-                base_model_names.append(self.model_names[i])
+                base_model_names.append(name)
         
-        # Split data into train and validation
-        train_loader, val_loader = self.split_train_val(validation_split)
+        # 1. First train all base models
+        for i, (model, name) in enumerate(zip(base_models, base_model_names)):
+            try:
+                # Skip if the model is already trained
+                if hasattr(model, 'is_initialized') and model.is_initialized:
+                    logger.info(f"Skipping training for {name} (already trained)")
+                else:
+                    self._train_single_model(model, train_loader, epochs=5)
+                    logger.info(f"Base model {i+1}/{len(base_models)} ({name}) trained")
+            except Exception as e:
+                logger.error(f"Error training base model {name}: {e}")
         
-        # Train base models individually
-        for i, model in enumerate(base_models):
-            self._train_single_model(model, train_loader, epochs=5)
-            logger.info(f"Base model {i+1}/{len(base_models)} ({base_model_names[i]}) trained")
+        # 2. Collect validation data for meta-learner training
+        X_val_all = []
+        y_val_all = []
         
-        # Skip training meta learners for now
-        for i, model in enumerate(meta_models):
-            logger.info(f"Skipping training for {meta_model_names[i]} (already trained)")
+        for batch_idx, (data, target) in enumerate(val_loader):
+            X_val_all.append(data.to(self.device))
+            y_val_all.append(target.to(self.device))
         
-        # Combine all models back together for GA-Stacking
+        # Concatenate batches
+        if X_val_all and y_val_all:
+            X_val = torch.cat(X_val_all)
+            y_val = torch.cat(y_val_all)
+        else:
+            logger.error("No validation data available for meta-learner training")
+            X_val, y_val = None, None
+        
+        # 3. Generate base model predictions for meta-learner training
+        if X_val is not None:
+            base_model_preds = []
+            
+            for model, name in zip(base_models, base_model_names):
+                try:
+                    with torch.no_grad():
+                        model.eval()
+                        preds = model(X_val)
+                        if isinstance(preds, torch.Tensor):
+                            preds = preds.cpu().detach().numpy()
+                        else:
+                            preds = np.array(preds)
+                        
+                        # Ensure 2D shape
+                        if len(preds.shape) == 1:
+                            preds = preds.reshape(-1, 1)
+                        
+                        base_model_preds.append(preds)
+                        logger.info(f"Generated predictions from {name} for meta-learner training")
+                except Exception as e:
+                    logger.error(f"Error generating predictions from {name}: {e}")
+                    # Add zeros as fallback
+                    base_model_preds.append(np.zeros((len(X_val), 1)))
+            
+            # 4. CRITICAL FIX: TRAIN META-LEARNERS WITH COMBINED BASE MODEL PREDICTIONS
+            if base_model_preds:
+                # Stack all base model predictions side by side
+                meta_features = np.hstack(base_model_preds)
+                
+                for meta_model, meta_name in zip(meta_models, meta_model_names):
+                    try:
+                        # THIS IS THE KEY FIX - update meta_model.input_dim to match base_model_preds
+                        meta_model.input_dim = meta_features.shape[1]
+                        
+                        # If it has a linear layer, update that too
+                        if hasattr(meta_model, 'linear'):
+                            meta_model.linear = nn.Linear(meta_features.shape[1], meta_model.output_dim, 
+                                                        device=self.device).to(dtype=torch.float32)
+                        
+                        # Convert targets to numpy for sklearn models
+                        if isinstance(y_val, torch.Tensor):
+                            y_meta = y_val.cpu().numpy()
+                        else:
+                            y_meta = y_val
+                        
+                        # Flatten if needed
+                        if len(y_meta.shape) > 1 and y_meta.shape[1] == 1:
+                            y_meta = y_meta.ravel()
+                        
+                        # Train using appropriate method
+                        if hasattr(meta_model, 'model') and hasattr(meta_model.model, 'fit'):
+                            meta_model.model.fit(meta_features, y_meta)
+                            
+                            # Update PyTorch layer with sklearn coefficients
+                            if hasattr(meta_model, 'linear') and hasattr(meta_model.model, 'coef_'):
+                                meta_model.linear.weight.data = torch.tensor(
+                                    meta_model.model.coef_, device=self.device, dtype=torch.float32)
+                                meta_model.linear.bias.data = torch.tensor(
+                                    meta_model.model.intercept_, device=self.device, dtype=torch.float32)
+                                
+                            meta_model.is_initialized = True
+                            logger.info(f"Meta-learner {meta_name} trained on base model predictions " 
+                                    f"with input dim {meta_features.shape[1]}")
+                        else:
+                            # Create PyTorch DataLoader for PyTorch models
+                            meta_dataset = torch.utils.data.TensorDataset(
+                                torch.tensor(meta_features, dtype=torch.float32), 
+                                torch.tensor(y_meta, dtype=torch.float32)
+                            )
+                            meta_loader = torch.utils.data.DataLoader(
+                                meta_dataset, batch_size=32, shuffle=True)
+                            
+                            self._train_single_model(meta_model, meta_loader, epochs=10)
+                    except Exception as e:
+                        logger.error(f"Error training meta-learner {meta_name}: {e}")
+        
+        # 5. Run GA-Stacking with fixed model dimensions
+        # START THE GA-STACKING WITH PROPERLY INITIALIZED MODELS
         all_models = base_models + meta_models
         all_model_names = base_model_names + meta_model_names
         
-        # Initialize GA-Stacking with all models
+        # Initialize GA-Stacking
         self.ga_stacking = GAStacking(
             base_models=all_models,
             model_names=all_model_names,
@@ -558,23 +664,32 @@ class GAStackingClient(fl.client.NumPyClient):
             generations=self.ga_generations,
             device=self.device
         )
-        self.ga_stacking.client = self
         
-        # Run GA optimization
+        # Run optimization
         logger.info("Starting GA-Stacking optimization")
-        best_weights = self.ga_stacking.optimize(train_loader, val_loader)
-        
-        # Get the optimized ensemble
-        self.ensemble_model = self.ga_stacking.get_ensemble_model()
-        
-        # Log the final weights
-        weight_str = ", ".join([
-            f"{name}: {weight:.4f}" 
-            for name, weight in zip(all_model_names, best_weights)
-        ])
-        logger.info(f"GA-Stacking complete. Ensemble weights: {weight_str}")
-        
-        return self.ensemble_model
+        try:
+            best_weights = self.ga_stacking.optimize(train_loader, val_loader)
+            
+            # Get optimized ensemble
+            self.ensemble_model = self.ga_stacking.get_ensemble_model()
+            
+            # Log final weights
+            weight_str = ", ".join([f"{name}: {weight:.4f}" for name, weight in zip(all_model_names, best_weights)])
+            logger.info(f"GA-Stacking complete. Ensemble weights: {weight_str}")
+            
+            return self.ensemble_model
+        except Exception as e:
+            logger.error(f"Error in GA-Stacking optimization: {e}")
+            # Fall back to equal weighting
+            weights = np.ones(len(all_models)) / len(all_models)
+            self.ensemble_model = EnsembleModel(
+                models=all_models,
+                weights=weights,
+                model_names=all_model_names,
+                device=self.device
+            )
+            logger.warning("Using equal weights due to GA-Stacking failure")
+            return self.ensemble_model
     
     def _train_single_model(
         self, 
@@ -628,6 +743,71 @@ class GAStackingClient(fl.client.NumPyClient):
             if epoch % 2 == 0:  # Log every 2 epochs
                 logger.debug(f"Epoch {epoch+1}/{epochs}, Loss: {avg_epoch_loss:.4f}")
     
+    def _initialize_models_from_server_config(self, configs):
+        """Initialize models from server configuration with proper type handling."""
+        models = []
+        model_names = []
+        
+        for config in configs:
+            model_type = config.get("estimator", "")
+            
+            if model_type == "lr":
+                model = LinearRegressionWrapper(self.input_dim, self.output_dim)
+                models.append(model)
+                model_names.append(model_type)
+                
+            elif model_type == "svc":
+                model = SVCWrapper(self.input_dim, self.output_dim)
+                models.append(model)
+                model_names.append(model_type)
+                
+            elif model_type == "rf":
+                model = RandomForestWrapper(self.input_dim, self.output_dim)
+                models.append(model)
+                model_names.append(model_type)
+                
+            elif model_type == "xgb":
+                # Fallback to GBM if XGBoost wrapper not implemented
+                model = GradientBoostingWrapper(self.input_dim, self.output_dim)
+                models.append(model)
+                model_names.append(model_type)
+                
+            elif model_type == "lgbm":
+                # Fallback to GBM if LightGBM wrapper not implemented
+                model = GradientBoostingWrapper(self.input_dim, self.output_dim)
+                models.append(model)
+                model_names.append(model_type)
+                
+            elif model_type == "catboost":
+                # Fallback to GBM if CatBoost wrapper not implemented
+                model = GradientBoostingWrapper(self.input_dim, self.output_dim)
+                models.append(model)
+                model_names.append(model_type)
+                
+            elif model_type == "knn":
+                # Use a simple wrapper or fallback to linear
+                model = LinearRegressionWrapper(self.input_dim, self.output_dim)
+                models.append(model)
+                model_names.append(model_type)
+                
+            elif model_type == "meta_lr":
+                # Meta learner needs input_dim = number of base models
+                model = MetaLearnerWrapper(len([c for c in configs if c.get("estimator") != "meta_lr"]), self.output_dim)
+                models.append(model)
+                model_names.append(model_type)
+                
+            else:
+                # Default to linear model
+                model = LinearModel(self.input_dim, self.output_dim)
+                models.append(model)
+                model_names.append("linear")
+        
+        # Move all models to device
+        for model in models:
+            model.to(self.device)
+        
+        return models, model_names
+    
     def initialize_models_from_config(
         self, 
         config: Dict[str, Any]
@@ -644,19 +824,24 @@ class GAStackingClient(fl.client.NumPyClient):
         initial_ensemble = config.get("initial_ensemble", None)
         
         if initial_ensemble:
-            logger.info(f"Initializing models from server-provided configuration ({len(initial_ensemble)} models)")
-            models, model_names = create_model_ensemble_from_config(
-                initial_ensemble,
-                input_dim=self.input_dim,
-                output_dim=self.output_dim,
-                device=self.device
-            )
-            
-            # Log the model types received
-            model_types = ", ".join(model_names)
-            logger.info(f"Initialized models: {model_types}")
-            
-            return models, model_names
+            # Check if we have model_parameters or the old format
+            if "model_parameters" in initial_ensemble:
+                logger.info(f"Initializing models from server-provided model_parameters ({len(initial_ensemble['model_parameters'])} models)")
+                return self._initialize_models_from_server_config(initial_ensemble["model_parameters"])
+            else:
+                logger.info(f"Initializing models from server-provided configuration ({len(initial_ensemble)} models)")
+                models, model_names = create_model_ensemble_from_config(
+                    initial_ensemble,
+                    input_dim=self.input_dim,
+                    output_dim=self.output_dim,
+                    device=self.device
+                )
+                
+                # Log the model types received
+                model_types = ", ".join(model_names)
+                logger.info(f"Initialized models: {model_types}")
+                
+                return models, model_names
         else:
             # Fall back to default model creation
             logger.info(f"No initial configuration provided, creating default ensemble with {self.ensemble_size} models")
@@ -670,7 +855,7 @@ class GAStackingClient(fl.client.NumPyClient):
     def fit(self, parameters: Parameters, config: Dict[str, Scalar]) -> Tuple[List[np.ndarray], int, Dict[str, Scalar]]:
         """
         Train the model on the local dataset.
-        
+
         For GA-Stacking, we train individual models and then optimize the ensemble.
         """
         # Check if client is authorized (if blockchain is available)
@@ -684,15 +869,17 @@ class GAStackingClient(fl.client.NumPyClient):
             except Exception as e:
                 logger.error(f"Failed to check client authorization: {e}")
                 # Continue anyway, server will check again
-        
+
         # Get global model from IPFS if hash is provided
         ipfs_hash = config.get("ipfs_hash", None)
         round_num = config.get("server_round", 0)
-        
+
         # If this is the first round, check for initial ensemble configuration
         if round_num == 1 and "initial_ensemble" in config:
             # Initialize models from configuration
-            self.base_models, self.model_names = self.initialize_models_from_config(config)
+            initial_config = config.get("initial_ensemble", {}).get("model_parameters", [])
+            self.base_models, self.model_names = self._initialize_models_from_server_config(initial_config)
+            logger.info(f"Initialized {len(self.base_models)} models from server configuration")
         elif ipfs_hash:
             # Load model from IPFS with dimension fix
             try:
@@ -705,20 +892,33 @@ class GAStackingClient(fl.client.NumPyClient):
             # Fallback to direct parameters
             params_arrays = parameters_to_ndarrays(parameters)
             self.set_parameters_individual(params_arrays)
-        
+
         # Get training config
         local_epochs = int(config.get("local_epochs", 5))
         do_ga_stacking = bool(config.get("ga_stacking", True))
         validation_split = float(config.get("validation_split", 0.2))
-        
+
         # Verify and fix models before training
         self._verify_and_fix_models()
+
+        # Create validation set for GA-Stacking optimization
+        train_data, val_data = self._create_validation_split(validation_split)
         
+        # Store generation history if GA-Stacking is used
+        ga_convergence_data = None
+
         # Run GA-Stacking to optimize ensemble weights
         if do_ga_stacking:
             logger.info("Performing GA-Stacking optimization")
             try:
+                # Modified to capture GA convergence metrics
                 self.train_ensemble(validation_split=validation_split)
+                
+                # Capture GA convergence data for reward calculation
+                ga_convergence_data = {
+                    "generations": self.ga_optimizer.generations if hasattr(self, 'ga_optimizer') else [],
+                    "convergence_rate": self._calculate_ga_convergence_rate() if hasattr(self, '_calculate_ga_convergence_rate') else 0.5
+                }
             except Exception as e:
                 logger.error(f"Error in GA-Stacking: {str(e)}")
                 # Fall back to equal weights
@@ -738,7 +938,7 @@ class GAStackingClient(fl.client.NumPyClient):
                     logger.info(f"Model {i+1}/{len(self.base_models)} trained")
                 except Exception as e:
                     logger.error(f"Error training model {i+1}: {str(e)}")
-            
+
             # Equal weighting if not using GA-Stacking
             weights = np.ones(len(self.base_models)) / len(self.base_models)
             self.ensemble_model = EnsembleModel(
@@ -747,7 +947,7 @@ class GAStackingClient(fl.client.NumPyClient):
                 model_names=self.model_names,
                 device=self.device
             )
-        
+
         # Ensure we have an ensemble model
         if self.ensemble_model is None:
             logger.warning("No ensemble model created, creating one with equal weights")
@@ -758,56 +958,35 @@ class GAStackingClient(fl.client.NumPyClient):
                 model_names=self.model_names,
                 device=self.device
             )
-        
+
+        # Calculate GA-Stacking specific metrics for reward system
+        ga_stacking_metrics = self._calculate_ga_stacking_metrics(val_data, ga_convergence_data)
+
         # Evaluate the ensemble
         try:
             accuracy, loss = self._evaluate_ensemble(self.test_loader)
         except Exception as e:
             logger.error(f"Error evaluating ensemble: {str(e)}")
             accuracy, loss = 0.0, float('inf')
-        
+
         # Save ensemble to IPFS
         metrics = {
             "loss": float(loss),
-            "accuracy": float(accuracy)
+            "accuracy": float(accuracy),
+            # Add GA-Stacking specific metrics
+            "ensemble_accuracy": float(ga_stacking_metrics.get("ensemble_accuracy", accuracy)),
+            "diversity_score": float(ga_stacking_metrics.get("diversity_score", 0.0)),
+            "generalization_score": float(ga_stacking_metrics.get("generalization_score", 0.0)),
+            "convergence_rate": float(ga_stacking_metrics.get("convergence_rate", 0.5)),
+            "avg_base_model_score": float(ga_stacking_metrics.get("avg_base_model_score", 0.0)),
         }
-        
+
         try:
             client_ipfs_hash = self.save_ensemble_to_ipfs(round_num, metrics)
         except Exception as e:
             logger.error(f"Failed to save ensemble to IPFS: {str(e)}")
             client_ipfs_hash = None
-        
-        # Record contribution to blockchain if available
-        if self.blockchain and self.wallet_address and client_ipfs_hash:
-            try:
-                tx_hash = self.blockchain.record_contribution(
-                    client_address=self.wallet_address,
-                    round_num=round_num,
-                    ipfs_hash=client_ipfs_hash,
-                    accuracy=accuracy
-                )
-                logger.info(f"Contribution recorded on blockchain, tx: {tx_hash}")
-                
-                # Log transaction for monitoring
-                self.log_transaction_metrics(
-                    tx_hash=tx_hash,
-                    gas_used=None,  # Update this if you can get gas used from the transaction
-                    success=True,
-                    round_num=round_num
-                )
-                metrics["blockchain_tx"] = tx_hash
-            except Exception as e:
-                logger.error(f"Failed to record contribution on blockchain: {e}")
-                # Log failed transaction
-                self.log_transaction_metrics(
-                    tx_hash=None,
-                    gas_used=None,
-                    success=False,
-                    round_num=round_num,
-                    error=str(e)
-                )
-        
+
         # Add to metrics history
         self.metrics_history.append({
             "round": round_num,
@@ -816,32 +995,498 @@ class GAStackingClient(fl.client.NumPyClient):
             "ensemble_weights": self.ensemble_model.weights.cpu().numpy().tolist() if self.ensemble_model else [],
             "ipfs_hash": client_ipfs_hash,
             "wallet_address": self.wallet_address if self.wallet_address else "unknown",
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            # Add GA-Stacking metrics to history
+            "ga_stacking_metrics": ga_stacking_metrics
         })
-        
+
         # Include IPFS hash in metrics
         metrics["ipfs_hash"] = ipfs_hash  # Return the server's hash for tracking
         metrics["client_ipfs_hash"] = client_ipfs_hash
         metrics["wallet_address"] = self.wallet_address if self.wallet_address else "unknown"
         metrics["ensemble_size"] = len(self.base_models)
         
+        # Add GA-Stacking specific metrics to the returned metrics
+        for key, value in ga_stacking_metrics.items():
+            metrics[key] = value
+
         # Get the ensemble parameters
         try:
             parameters_updated = self.get_parameters(config)
         except Exception as e:
             logger.error(f"Error getting parameters: {str(e)}")
             parameters_updated = parameters_to_ndarrays(parameters)  # Return original parameters
-        
+
         # Get number of training samples
         num_samples = len(self.train_loader.dataset)
-        
+
         # Make sure metrics only contains serializable values
         for key in list(metrics.keys()):
             if not isinstance(metrics[key], (int, float, str, bool, list)):
                 metrics[key] = str(metrics[key])
-        
+
         # Return the raw parameters (not wrapped in Flower Parameters)
         return parameters_updated, num_samples, metrics
+
+    def _calculate_ga_stacking_metrics(self, validation_data, ga_convergence_data=None):
+        """
+        Calculate GA-Stacking specific metrics for reward calculation.
+        
+        Args:
+            validation_data: Tuple of (X_val, y_val) for evaluation
+            ga_convergence_data: Optional dictionary containing GA convergence info
+            
+        Returns:
+            dict: GA-Stacking metrics
+        """
+        metrics = {}
+    
+        try:
+            X_val, y_val = validation_data
+            
+            # Handle empty validation data
+            if X_val.numel() == 0 or y_val.numel() == 0:
+                logger.warning("Empty validation data. Using default metrics.")
+                return {
+                    "ensemble_accuracy": 0.0,
+                    "diversity_score": 0.0,
+                    "generalization_score": 0.0,
+                    "convergence_rate": 0.5,
+                    "avg_base_model_score": 0.0,
+                    "final_score": 0
+                }
+            
+            # 1. Calculate ensemble accuracy on validation data
+            if self.ensemble_model is None:
+                logger.warning("No ensemble model for metrics calculation. Creating one with equal weights.")
+                weights = np.ones(len(self.base_models)) / len(self.base_models)
+                self.ensemble_model = EnsembleModel(
+                    models=self.base_models,
+                    weights=weights,
+                    model_names=self.model_names,
+                    device=self.device
+                )
+            
+            # Ensure data is float32 for consistent dtype
+            X_val = X_val.to(dtype=torch.float32, device=self.device)
+            y_val = y_val.to(dtype=torch.float32, device=self.device)
+                
+            # Get ensemble predictions
+            with torch.no_grad():
+                ensemble_outputs = self.ensemble_model(X_val)
+                
+                # For regression tasks, we need to define what "accuracy" means
+                # Here, we'll consider a prediction "correct" if it's within 0.5 of the true value
+                threshold = 0.5
+                ensemble_outputs = ensemble_outputs.to(dtype=torch.float32)
+                y_val = y_val.to(dtype=torch.float32)
+                
+                # Ensure dimensions match
+                if ensemble_outputs.shape != y_val.shape:
+                    if len(ensemble_outputs.shape) == 1:
+                        ensemble_outputs = ensemble_outputs.unsqueeze(1)
+                    if len(y_val.shape) == 1:
+                        y_val = y_val.unsqueeze(1)
+                        
+                correct = torch.sum(torch.abs(ensemble_outputs - y_val) < threshold).item()
+                total = y_val.size(0)
+                ensemble_accuracy = correct / total if total > 0 else 0.0
+                    
+            metrics["ensemble_accuracy"] = float(ensemble_accuracy)
+            
+            # 2. Calculate diversity among base models (include only base models, not meta)
+            base_models = []
+            base_model_names = []
+            
+            for i, (model, name) in enumerate(zip(self.base_models, self.model_names)):
+                if name != "meta_lr" and "meta" not in name.lower():
+                    base_models.append(model)
+                    base_model_names.append(name)
+            
+            diversity_score = self._calculate_model_diversity(validation_data, base_models, base_model_names)
+            metrics["diversity_score"] = float(diversity_score)
+            
+            # 3. Calculate generalization score
+            # We need to calculate on training data as well
+            try:
+                # Try to get a sample of training data
+                train_sample_size = min(1000, X_val.size(0) * 4)  # Use at most 1000 samples or 4x validation size
+                
+                # Get random training samples
+                train_indices = torch.randperm(len(self.train_loader.dataset))[:train_sample_size]
+                train_data = []
+                train_targets = []
+                
+                # Extract samples from dataset
+                for idx in train_indices:
+                    data, target = self.train_loader.dataset[idx]
+                    train_data.append(data.unsqueeze(0))
+                    train_targets.append(target.unsqueeze(0))
+                    
+                # Combine into tensors
+                train_data_tensor = torch.cat(train_data, dim=0) if train_data else torch.tensor([])
+                train_targets_tensor = torch.cat(train_targets, dim=0) if train_targets else torch.tensor([])
+                
+                if train_data_tensor.numel() > 0:
+                    # Calculate training accuracy
+                    with torch.no_grad():
+                        train_outputs = self.ensemble_model(train_data_tensor)
+                        correct = torch.sum(torch.abs(train_outputs - train_targets_tensor) < threshold).item()
+                        total = train_targets_tensor.size(0)
+                        train_accuracy = correct / total if total > 0 else 0.0
+                        
+                    # Calculate generalization as the difference between train and validation accuracy
+                    accuracy_gap = abs(train_accuracy - ensemble_accuracy)
+                    generalization_score = 1.0 - min(1.0, accuracy_gap / max(0.001, train_accuracy))
+                else:
+                    # Default if we couldn't get training samples
+                    generalization_score = 0.5
+                    logger.warning("Couldn't calculate generalization score from training data. Using default.")
+            except Exception as gen_err:
+                logger.error(f"Error calculating generalization score: {gen_err}")
+                generalization_score = 0.5
+                
+            metrics["generalization_score"] = float(generalization_score)
+            
+            # 4. Calculate convergence rate if GA data is available
+            if ga_convergence_data and "convergence_rate" in ga_convergence_data:
+                metrics["convergence_rate"] = float(ga_convergence_data["convergence_rate"])
+            elif hasattr(self, "ga_stacking") and hasattr(self.ga_stacking, "fitness_history"):
+                # We have GA fitness history, calculate from there
+                fitness_history = self.ga_stacking.fitness_history
+                if len(fitness_history) > 1:
+                    initial_fitness = fitness_history[0]
+                    final_fitness = fitness_history[-1]
+                    generations = len(fitness_history)
+                    
+                    # Calculate when we reach 90% of improvement
+                    target_improvement = 0.9 * (final_fitness - initial_fitness)
+                    gen_to_90_percent = generations  # Default
+                    
+                    for i, fitness in enumerate(fitness_history):
+                        if (fitness - initial_fitness) >= target_improvement:
+                            gen_to_90_percent = i + 1
+                            break
+                            
+                    convergence_rate = 1.0 - (gen_to_90_percent / generations)
+                    metrics["convergence_rate"] = float(max(0.0, min(1.0, convergence_rate)))
+                else:
+                    metrics["convergence_rate"] = 0.5  # Default
+            else:
+                metrics["convergence_rate"] = 0.5  # Default
+            
+            # 5. Calculate average performance of base models
+            base_accuracies = []
+            for model in base_models:
+                try:
+                    with torch.no_grad():
+                        outputs = model(X_val)
+                        outputs = outputs.to(dtype=torch.float32)
+                        # Ensure dimensions match
+                        if outputs.shape != y_val.shape:
+                            if len(outputs.shape) == 1:
+                                outputs = outputs.unsqueeze(1)
+                                
+                        correct = torch.sum(torch.abs(outputs - y_val) < threshold).item()
+                        total = y_val.size(0)
+                        accuracy = correct / total if total > 0 else 0.0
+                        base_accuracies.append(accuracy)
+                except Exception as e:
+                    logger.warning(f"Error evaluating base model: {e}")
+                    # Skip this model
+            
+            if base_accuracies:
+                avg_base_model_score = sum(base_accuracies) / len(base_accuracies)
+            else:
+                avg_base_model_score = 0.0
+                    
+            metrics["avg_base_model_score"] = float(avg_base_model_score)
+            
+            # Final score calculation according to GA-Stacking reward formula
+            weights = {
+                "ensemble_accuracy": 0.40,
+                "diversity_score": 0.20,
+                "generalization_score": 0.20,
+                "convergence_rate": 0.10,
+                "avg_base_model_score": 0.10
+            }
+            
+            weighted_score = (
+                metrics["ensemble_accuracy"] * weights["ensemble_accuracy"] +
+                metrics["diversity_score"] * weights["diversity_score"] +
+                metrics["generalization_score"] * weights["generalization_score"] +
+                metrics["convergence_rate"] * weights["convergence_rate"] +
+                metrics["avg_base_model_score"] * weights["avg_base_model_score"]
+            )
+            
+            # Apply bonus for exceptional accuracy (>90%)
+            if metrics["ensemble_accuracy"] > 0.9:
+                bonus = (metrics["ensemble_accuracy"] - 0.9) * 1.5
+                weighted_score += bonus
+                metrics["accuracy_bonus"] = float(bonus)
+            
+            # Convert to integer score (0-10000)
+            metrics["final_score"] = int(min(1.0, weighted_score) * 10000)
+            
+            # Log the metrics
+            logger.info(f"GA-Stacking metrics: Accuracy={metrics['ensemble_accuracy']:.4f}, "
+                    f"Diversity={metrics['diversity_score']:.4f}, Final Score={metrics['final_score']}")
+            
+        except Exception as e:
+            logger.error(f"Error calculating GA-Stacking metrics: {e}")
+            # Provide default values
+            metrics = {
+                "ensemble_accuracy": 0.0,
+                "diversity_score": 0.0,
+                "generalization_score": 0.0,
+                "convergence_rate": 0.5,
+                "avg_base_model_score": 0.0,
+                "final_score": 0
+            }
+        
+        return metrics
+
+    def _calculate_model_diversity(self, validation_data, base_models=None, base_model_names=None):
+        """
+        Calculate diversity among base models with error handling.
+        
+        Args:
+            validation_data: Tuple of (X_val, y_val)
+            base_models: Optional list of base models (if None, uses self.base_models)
+            base_model_names: Optional list of model names
+            
+        Returns:
+            float: Diversity score (0-1)
+        """
+        try:
+            X_val, _ = validation_data
+            
+            if X_val.numel() == 0:
+                logger.warning("Empty validation data. Cannot calculate diversity.")
+                return 0.0
+            
+            # Use provided models or default to self.base_models
+            models_to_use = base_models if base_models is not None else self.base_models
+            model_names = base_model_names if base_model_names is not None else self.model_names
+            
+            # Ensure data is float32
+            X_val = X_val.to(dtype=torch.float32, device=self.device)
+                
+            # Get predictions from all models
+            all_predictions = []
+            
+            for i, model in enumerate(models_to_use):
+                model_name = model_names[i] if i < len(model_names) else f"model_{i}"
+                
+                # Skip meta-learners in diversity calculation
+                if model_name == "meta_lr" or "meta" in model_name.lower():
+                    continue
+                    
+                try:
+                    with torch.no_grad():
+                        model.eval()
+                        outputs = model(X_val)
+                        outputs = outputs.to(dtype=torch.float32)
+                        
+                        # For regression, discretize predictions for diversity calculation
+                        # We'll round to the nearest 0.5 for comparison
+                        discretized = torch.round(outputs * 2) / 2
+                        all_predictions.append(discretized)
+                except Exception as e:
+                    logger.warning(f"Error getting predictions for diversity calculation from {model_name}: {e}")
+                    # Skip this model
+            
+            # Need at least 2 models with predictions
+            if len(all_predictions) < 2:
+                logger.warning("Not enough models with valid predictions for diversity calculation")
+                return 0.0
+            
+            # Calculate pairwise disagreement
+            disagreement_sum = 0
+            comparison_count = 0
+            
+            for i in range(len(all_predictions)):
+                for j in range(i+1, len(all_predictions)):
+                    try:
+                        # Ensure tensors have same shape
+                        if all_predictions[i].shape != all_predictions[j].shape:
+                            if len(all_predictions[i].shape) == 1:
+                                all_predictions[i] = all_predictions[i].unsqueeze(1)
+                            if len(all_predictions[j].shape) == 1:
+                                all_predictions[j] = all_predictions[j].unsqueeze(1)
+                                
+                        # Count how often models i and j make different predictions
+                        disagreement = torch.mean((all_predictions[i] != all_predictions[j]).float()).item()
+                        disagreement_sum += disagreement
+                        comparison_count += 1
+                    except Exception as e:
+                        logger.warning(f"Error in diversity calculation for models {i} and {j}: {e}")
+                        # Skip this comparison
+            
+            # Normalize by number of comparisons
+            if comparison_count == 0:
+                return 0.0
+            
+            return float(disagreement_sum / comparison_count)
+                
+        except Exception as e:
+            logger.error(f"Error in model diversity calculation: {e}")
+            return 0.0
+    
+    def _calculate_ga_convergence_rate(self):
+        """
+        Calculate how quickly the GA algorithm converged to a solution.
+        
+        Returns:
+            float: Convergence rate (0-1)
+        """
+        # Get fitness history from GA optimizer
+        if not hasattr(self, "ga_optimizer") or not hasattr(self.ga_optimizer, "fitness_history"):
+            return 0.5  # Default value
+        
+        fitness_history = self.ga_optimizer.fitness_history
+        
+        if not fitness_history or len(fitness_history) < 2:
+            return 0.5  # Not enough data
+        
+        # Calculate the rate of improvement
+        initial_fitness = fitness_history[0]
+        final_fitness = fitness_history[-1]
+        max_generations = len(fitness_history)
+        
+        # When did we reach 90% of the final improvement?
+        target_improvement = 0.9 * (final_fitness - initial_fitness)
+        generations_to_90_percent = max_generations  # Default
+        
+        for i, fitness in enumerate(fitness_history):
+            if (fitness - initial_fitness) >= target_improvement:
+                generations_to_90_percent = i + 1
+                break
+        
+        # Normalize: faster convergence = higher score
+        convergence_rate = 1.0 - (generations_to_90_percent / max_generations)
+        
+        # Ensure bounds
+        return max(0.0, min(1.0, convergence_rate))
+
+    def _create_validation_split(self, validation_split=0.2):
+        """
+        Create a validation split from the training data.
+        
+        Args:
+            validation_split: Fraction of training data to use for validation
+            
+        Returns:
+            tuple: (train_data, validation_data)
+        """
+        try:
+            # Get the dataset from the data loader
+            dataset = self.train_loader.dataset
+            
+            # Check what kind of dataset we're working with
+            if hasattr(dataset, 'data') and hasattr(dataset, 'targets'):
+                # Standard dataset with data and targets attributes
+                train_data = dataset.data
+                train_targets = dataset.targets
+            elif isinstance(dataset, torch.utils.data.TensorDataset):
+                # TensorDataset case
+                train_data = dataset.tensors[0]
+                train_targets = dataset.tensors[1]
+            elif hasattr(dataset, 'x') and hasattr(dataset, 'y'):
+                # Our SimpleDataset case
+                train_data = dataset.x
+                train_targets = dataset.y
+            else:
+                # Generic case: get all samples
+                all_data = []
+                all_targets = []
+                for data, target in self.train_loader:
+                    all_data.append(data)
+                    all_targets.append(target)
+                
+                train_data = torch.cat(all_data, dim=0)
+                train_targets = torch.cat(all_targets, dim=0)
+                
+            # Calculate split
+            num_samples = len(train_data)
+            num_val_samples = int(num_samples * validation_split)
+            
+            # Create random indices
+            indices = torch.randperm(num_samples)
+            val_indices = indices[:num_val_samples]
+            train_indices = indices[num_val_samples:]
+            
+            # Extract validation data
+            val_data = train_data[val_indices]
+            val_targets = train_targets[val_indices]
+            
+            # Extract training data (subset without validation)
+            train_data_subset = train_data[train_indices]
+            train_targets_subset = train_targets[train_indices]
+            
+            logger.info(f"Created validation split: {len(val_data)} validation, {len(train_data_subset)} training samples")
+            
+            return (train_data_subset, train_targets_subset), (val_data, val_targets)
+        
+        except Exception as e:
+            logger.error(f"Error creating validation split: {e}")
+            logger.info("Falling back to simple random split of DataLoader")
+            
+            # Fallback method using random_split
+            train_dataset = self.train_loader.dataset
+            
+            # Calculate sizes
+            val_size = int(len(train_dataset) * validation_split)
+            train_size = len(train_dataset) - val_size
+            
+            # Split the dataset
+            train_subset, val_subset = random_split(
+                train_dataset, 
+                [train_size, val_size],
+                generator=torch.Generator().manual_seed(42)  # For reproducibility
+            )
+            
+            # Create new data loaders
+            train_loader = DataLoader(
+                train_subset,
+                batch_size=self.train_loader.batch_size,
+                shuffle=True
+            )
+            
+            val_loader = DataLoader(
+                val_subset,
+                batch_size=self.train_loader.batch_size,
+                shuffle=False
+            )
+            
+            # Convert to tensor format for consistency
+            all_train_data = []
+            all_train_targets = []
+            all_val_data = []
+            all_val_targets = []
+            
+            for data, target in train_loader:
+                all_train_data.append(data)
+                all_train_targets.append(target)
+                
+            for data, target in val_loader:
+                all_val_data.append(data)
+                all_val_targets.append(target)
+            
+            if all_train_data and all_val_data:
+                train_data_tensor = torch.cat(all_train_data, dim=0)
+                train_targets_tensor = torch.cat(all_train_targets, dim=0)
+                val_data_tensor = torch.cat(all_val_data, dim=0)
+                val_targets_tensor = torch.cat(all_val_targets, dim=0)
+                
+                logger.info(f"Created fallback validation split: {len(val_data_tensor)} validation, {len(train_data_tensor)} training samples")
+                
+                return (train_data_tensor, train_targets_tensor), (val_data_tensor, val_targets_tensor)
+            else:
+                # If all else fails, return empty tensors with warning
+                logger.warning("Failed to create validation split, returning empty tensors")
+                empty_tensor = torch.tensor([])
+                return (empty_tensor, empty_tensor), (empty_tensor, empty_tensor)
 
     def _verify_and_fix_models(self):
         """Verify models have correct dimensions and fix if needed."""
@@ -849,81 +1494,72 @@ class GAStackingClient(fl.client.NumPyClient):
             logger.warning("No base models to verify")
             return
             
-        fixed_models = []
-        
-        # Check if we need to fix the meta_lr model's input dimension
-        meta_model_idx = None
-        num_base_models = 0
-        
         # First pass: count base models and find meta learner
+        meta_model_idx = []
+        base_models_count = 0
+        
         for i, model_name in enumerate(self.model_names):
-            if model_name == "meta_lr" or "meta" in model_name.lower():
-                meta_model_idx = i
+            if model_name == "meta_lr" or "MetaLearner" in model_name:
+                meta_model_idx.append(i)
             else:
-                num_base_models += 1
+                base_models_count += 1
         
-        # Second pass: fix or recreate models if needed
+        logger.info(f"Identified {base_models_count} base models and {len(meta_model_idx)} meta-learners")
+        
+        # Second pass: fix each model
         for i, (model, name) in enumerate(zip(self.base_models, self.model_names)):
-            if i == meta_model_idx:
-                # Check meta learner's input dimension
-                if hasattr(model, 'input_dim') and model.input_dim != num_base_models:
-                    logger.warning(f"Fixing meta learner input dimension: {model.input_dim} -> {num_base_models}")
-                    # Create a new meta learner with correct dimensions
-                    from base_models import MetaLearnerWrapper
-                    new_model = MetaLearnerWrapper(input_dim=num_base_models, output_dim=self.output_dim)
-                    # Try to preserve learned coefficients if possible, but reshape if needed
-                    if hasattr(model, 'coef_'):
-                        # Initialize with equal weights
-                        new_model.coef_ = np.ones((1, num_base_models)) / num_base_models
-                        new_model.intercept_ = np.zeros(1) if hasattr(model, 'intercept_') else np.zeros(1)
-                        new_model.is_initialized = True
-                    fixed_models.append(new_model)
-                    logger.info(f"Created new meta learner with input_dim={num_base_models}")
-                else:
-                    fixed_models.append(model)
-            else:
-                # Check base model dimensions
-                if hasattr(model, 'input_dim') and model.input_dim != self.input_dim:
-                    logger.warning(f"Input dimension mismatch for {name}: {model.input_dim} != {self.input_dim}")
-                    # Recreate the model with correct dimensions
-                    if name == "lr":
-                        from base_models import LinearRegressionWrapper
-                        new_model = LinearRegressionWrapper(input_dim=self.input_dim, output_dim=self.output_dim)
-                        fixed_models.append(new_model)
-                        logger.info(f"Created new {name} model with input_dim={self.input_dim}")
-                    elif name == "svc":
-                        from base_models import SVCWrapper
-                        new_model = SVCWrapper(input_dim=self.input_dim, output_dim=self.output_dim)
-                        fixed_models.append(new_model)
-                        logger.info(f"Created new {name} model with input_dim={self.input_dim}")
-                    elif name == "rf":
-                        from base_models import RandomForestWrapper
-                        new_model = RandomForestWrapper(input_dim=self.input_dim, output_dim=self.output_dim)
-                        fixed_models.append(new_model)
-                        logger.info(f"Created new {name} model with input_dim={self.input_dim}")
-                    else:
-                        # For unknown models, create a linear model
-                        from base_models import LinearModel
-                        new_model = LinearModel(input_dim=self.input_dim, output_dim=self.output_dim)
-                        fixed_models.append(new_model)
-                        logger.info(f"Created new linear model for {name} with input_dim={self.input_dim}")
-                else:
-                    fixed_models.append(model)
-        
-        # Update models if any were fixed
-        if len(fixed_models) == len(self.base_models):
-            self.base_models = fixed_models
+            # Fix meta learners
+            if i in meta_model_idx:
+                if hasattr(model, 'input_dim') and model.input_dim != base_models_count:
+                    logger.warning(f"Fixing meta learner input dimension: {model.input_dim} -> {base_models_count}")
+                    
+                    # Check if it's a pytorch model with linear layer
+                    if hasattr(model, 'linear') and hasattr(model.linear, 'weight'):
+                        with torch.no_grad():
+                            # Create new linear layer with correct dimensions
+                            new_linear = nn.Linear(base_models_count, model.linear.weight.shape[0], 
+                                                device=model.linear.weight.device)
+                            # Initialize with uniform weights
+                            new_linear.weight.data.fill_(1.0 / base_models_count)
+                            # Replace the layer
+                            model.linear = new_linear
+                            model.input_dim = base_models_count
+                            logger.info(f"Fixed meta learner linear layer dimensions")
+                    elif hasattr(model, 'model') and hasattr(model.model, 'coef_'):
+                        # For sklearn models
+                        try:
+                            # Initialize with equal weights
+                            model.model.coef_ = np.ones((1, base_models_count)) / base_models_count
+                            model.input_dim = base_models_count
+                            logger.info(f"Fixed sklearn meta learner coefficients")
+                        except Exception as e:
+                            logger.error(f"Error fixing sklearn meta learner: {e}")
             
-        # Ensure all models are on the correct device
-        for model in self.base_models:
-            if hasattr(model, 'to'):
-                model.to(self.device)
+            # Fix input dimensions for base models if needed
+            elif hasattr(model, 'input_dim') and model.input_dim != self.input_dim:
+                logger.warning(f"Input dimension mismatch for {name}: {model.input_dim} != {self.input_dim}")
+                
+                # For PyTorch models with linear layer
+                if hasattr(model, 'linear') and hasattr(model.linear, 'weight'):
+                    try:
+                        with torch.no_grad():
+                            # Create new layer with correct dimensions
+                            new_linear = nn.Linear(self.input_dim, model.linear.weight.shape[0], 
+                                                device=model.linear.weight.device)
+                            # Initialize with small random values
+                            torch.nn.init.xavier_uniform_(new_linear.weight)
+                            # Replace the layer
+                            model.linear = new_linear
+                            model.input_dim = self.input_dim
+                            logger.info(f"Fixed {name} input dimension")
+                    except Exception as e:
+                        logger.error(f"Error fixing {name} input dimension: {e}")
     
     def evaluate(
         self, parameters: Parameters, config: Dict[str, Scalar]
     ) -> Tuple[float, int, Dict[str, Scalar]]:
         """
-        Evaluate the model on the local test dataset.
+        Evaluate the model on the local test dataset with proper meta-learner handling.
         """
         # Check if client is authorized (if blockchain is available)
         if self.blockchain and self.wallet_address:
@@ -948,6 +1584,9 @@ class GAStackingClient(fl.client.NumPyClient):
             params_arrays = parameters_to_ndarrays(parameters)
             self.set_parameters_individual(params_arrays)
         
+        # IMPORTANT: Verify model dimensions match after loading
+        self._verify_and_fix_models()
+        
         # Evaluate the ensemble
         accuracy, loss = self._evaluate_ensemble(self.test_loader)
         
@@ -969,11 +1608,11 @@ class GAStackingClient(fl.client.NumPyClient):
             "ensemble_size": len(self.base_models) if self.ensemble_model else 0
         }
         
-        return float(loss), len(self.test_loader.dataset), metrics    
+        return float(loss), len(self.test_loader.dataset), metrics
     
     def _evaluate_ensemble(self, data_loader: DataLoader) -> Tuple[float, float]:
         """
-        Evaluate the ensemble model.
+        Evaluate the ensemble model with proper meta-learner handling.
         
         Args:
             data_loader: Data loader to evaluate on
@@ -1002,6 +1641,7 @@ class GAStackingClient(fl.client.NumPyClient):
             for data, target in data_loader:
                 data, target = data.to(self.device), target.to(self.device)
                 
+                # Use the ensemble_model forward method which we fixed
                 output = self.ensemble_model(data)
                 loss = criterion(output, target)
                 
@@ -1062,123 +1702,8 @@ class GAStackingClient(fl.client.NumPyClient):
         with open(filepath, "w") as f:
             json.dump(self.metrics_history, f, indent=2)
         logger.info(f"Saved metrics history to {filepath}")
-        
-    def log_ga_progress(self, generation, best_fitness, avg_fitness):
-        """Log GA-Stacking progress for the monitoring dashboard"""
-        if not self.client_id:
-            return  # Skip logging if client_id is not set
-            
-        # Create directory structure if it doesn't exist
-        client_dir = f'metrics/{self.client_id}'
-        os.makedirs(client_dir, exist_ok=True)
-        
-        ga_file = f'{client_dir}/ga_progress.json'
-        
-        # Read existing data if available
-        ga_data = {
-            'best_fitness': [],
-            'avg_fitness': [],
-            'weights': []
-        }
-        
-        if os.path.exists(ga_file):
-            try:
-                with open(ga_file, 'r') as f:
-                    existing_data = json.load(f)
-                    # Only use existing data if it's properly structured
-                    if isinstance(existing_data, dict):
-                        for key in ga_data:
-                            if key in existing_data and isinstance(existing_data[key], list):
-                                ga_data[key] = existing_data[key]
-            except Exception as e:
-                logger.warning(f"Error reading GA progress file: {e}")
-        
-        # Get current weights from GA-Stacking or ensemble model
-        weights_dict = {}
-        if hasattr(self, 'ga_stacking') and hasattr(self.ga_stacking, 'best_individual'):
-            individual = self.ga_stacking.best_individual
-            model_names = self.model_names[:len(individual)]
-            for i, name in enumerate(model_names):
-                if i < len(individual):
-                    weights_dict[name] = float(individual[i])
-        elif hasattr(self, 'ensemble_model') and hasattr(self.ensemble_model, 'weights'):
-            weights = self.ensemble_model.weights.cpu().numpy().tolist()
-            model_names = self.model_names[:len(weights)]
-            for i, name in enumerate(model_names):
-                if i < len(weights):
-                    weights_dict[name] = weights[i]
-        
-        # Append new data
-        ga_data['best_fitness'].append(float(best_fitness))
-        ga_data['avg_fitness'].append(float(avg_fitness))
-        ga_data['weights'].append(weights_dict)
-        
-        # Write updated data
-        try:
-            with open(ga_file, 'w') as f:
-                json.dump(ga_data, f, indent=2)
-        except Exception as e:
-            logger.warning(f"Error writing GA progress file: {e}")
 
-    def log_system_status(self):
-        """Log system status for monitoring dashboard"""
-        try:
-            # Ensure directory exists
-            os.makedirs('metrics', exist_ok=True)
-            
-            # Determine connection status
-            ipfs_connected = self.ipfs is not None
-            blockchain_connected = self.blockchain is not None and self.wallet_address is not None
-            
-            # Create status data
-            status = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "ipfs": {
-                    "status": "Connected" if ipfs_connected else "Disconnected",
-                    "url": str(self.ipfs.ipfs_api_url) if ipfs_connected else None
-                },
-                "blockchain": {
-                    "status": "Connected" if blockchain_connected else "Disconnected",
-                    "address": self.wallet_address if blockchain_connected else None
-                },
-                "client_id": self.client_id
-            }
-            
-            # Write status to file
-            with open('metrics/system_status.json', 'w') as f:
-                json.dump(status, f, indent=2)
-                
-        except Exception as e:
-            logger.warning(f"Failed to log system status: {e}")
 
-    def log_transaction_metrics(self, tx_hash, gas_used, success, round_num=None, error=None):
-        """Log blockchain transaction metrics for the dashboard"""
-        import os
-        import json
-        from datetime import datetime, timezone
-        
-        # Ensure directory exists
-        os.makedirs('metrics/blockchain', exist_ok=True)
-        
-        # Create transaction metrics
-        metrics = {
-            'timestamp': datetime.now(timezone.utc).isoformat(),
-            'client_id': self.client_id,
-            'wallet_address': self.wallet_address,
-            'tx_hash': tx_hash,
-            'gas_used': gas_used,
-            'success': success,
-            'round_num': round_num,
-        }
-        
-        # Add error if present
-        if error:
-            metrics['error'] = str(error)
-        
-        # Write to file (append mode)
-        with open('metrics/blockchain/transaction_metrics.jsonl', 'a') as f:
-            f.write(json.dumps(metrics) + '\n')
-            
 def start_client(
     server_address: str = "127.0.0.1:8080",
     ipfs_url: str = "http://127.0.0.1:5001",
@@ -1240,29 +1765,113 @@ def start_client(
     
     # Load dataset from files
     def load_dataset_from_files(train_file, test_file):
-        # Read train and test files
+        """
+        Load dataset from train and test files with preprocessing for categorical variables
+        
+        Args:
+            train_file: Path to training data file
+            test_file: Path to test data file
+            
+        Returns:
+            train_loader: DataLoader for training data
+            test_loader: DataLoader for test data
+            input_dim: Input dimension for the model
+            output_dim: Output dimension for the model
+        """
+        # Read files with comment handling
         train_df = pd.read_csv(train_file, comment='#')
         test_df = pd.read_csv(test_file, comment='#')
         
-        # Extract features and targets
-        feature_columns = [col for col in train_df.columns if col != 'target']
+        # Identify target column (fraud detection dataset uses 'is_fraud')
+        if 'is_fraud' in train_df.columns:
+            target_column = 'is_fraud'
+        elif 'target' in train_df.columns:
+            target_column = 'target'
+        else:
+            # Try to identify the target column - assume it's the last column if not found
+            potential_targets = ['label', 'class', 'fraud', 'is_fraud']
+            target_found = False
+            
+            for potential in potential_targets:
+                if potential in train_df.columns:
+                    target_column = potential
+                    target_found = True
+                    break
+                    
+            if not target_found:
+                target_column = train_df.columns[-1]
+                logger.warning(f"Could not identify target column, using the last column: {target_column}")
         
-        # Convert to tensors
-        train_x = torch.tensor(train_df[feature_columns].values, dtype=torch.float32)
-        train_y = torch.tensor(train_df['target'].values.reshape(-1, 1), dtype=torch.float32)
+        # Extract features and target
+        feature_columns = [col for col in train_df.columns if col != target_column]
         
-        test_x = torch.tensor(test_df[feature_columns].values, dtype=torch.float32)
-        test_y = torch.tensor(test_df['target'].values.reshape(-1, 1), dtype=torch.float32)
+        # Identify categorical and numerical columns
+        categorical_cols = []
+        numerical_cols = []
         
-        # Update input and output dimensions based on the data
-        nonlocal input_dim, output_dim
+        for col in feature_columns:
+            if train_df[col].dtype == 'object' or train_df[col].dtype.name == 'category':
+                categorical_cols.append(col)
+            else:
+                numerical_cols.append(col)
+        
+        logger.info(f"Identified {len(categorical_cols)} categorical and {len(numerical_cols)} numerical features")
+        
+        # Create preprocessing pipeline
+        if categorical_cols:
+            # We have categorical columns to handle
+            preprocessor = ColumnTransformer(
+                transformers=[
+                    ('num', StandardScaler(), numerical_cols),
+                    ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
+                ])
+        else:
+            # Only numerical data
+            preprocessor = StandardScaler()
+        
+        # Fit preprocessor on training data
+        preprocessor.fit(train_df[feature_columns])
+        
+        # Transform data
+        X_train = preprocessor.transform(train_df[feature_columns])
+        X_test = preprocessor.transform(test_df[feature_columns])
+        
+        # Convert sparse matrix to dense if needed
+        if hasattr(X_train, 'toarray'):
+            X_train = X_train.toarray()
+        if hasattr(X_test, 'toarray'):
+            X_test = X_test.toarray()
+        
+        # Get targets
+        y_train = train_df[target_column].values
+        y_test = test_df[target_column].values
+        
+        # Reshape targets to be 2D if needed
+        if len(y_train.shape) == 1:
+            y_train = y_train.reshape(-1, 1)
+        if len(y_test.shape) == 1:
+            y_test = y_test.reshape(-1, 1)
+        
+        # Convert to PyTorch tensors
+        train_x = torch.tensor(X_train, dtype=torch.float32)
+        train_y = torch.tensor(y_train, dtype=torch.float32)
+        test_x = torch.tensor(X_test, dtype=torch.float32)
+        test_y = torch.tensor(y_test, dtype=torch.float32)
+        
+        # Get dimensions
         input_dim = train_x.shape[1]
         output_dim = train_y.shape[1]
         
         logger.info(f"Dataset loaded - Input dim: {input_dim}, Output dim: {output_dim}")
+        logger.info(f"Train samples: {len(train_x)}, Test samples: {len(test_x)}")
+        
+        # Check for class imbalance if it's a classification task
+        if output_dim == 1:
+            pos_ratio = train_y.mean().item() * 100
+            logger.info(f"Positive class ratio: {pos_ratio:.2f}%")
         
         # Create data loaders
-        class SimpleDataset(torch.utils.data.Dataset):
+        class FraudDataset(Dataset):
             def __init__(self, x, y):
                 self.x = x
                 self.y = y
@@ -1274,13 +1883,13 @@ def start_client(
                 return self.x[idx], self.y[idx]
         
         train_loader = DataLoader(
-            SimpleDataset(train_x, train_y), batch_size=32, shuffle=True
+            FraudDataset(train_x, train_y), batch_size=32, shuffle=True
         )
         test_loader = DataLoader(
-            SimpleDataset(test_x, test_y), batch_size=32, shuffle=False
+            FraudDataset(test_x, test_y), batch_size=32, shuffle=False
         )
         
-        return train_loader, test_loader
+        return train_loader, test_loader, input_dim, output_dim
 
     # Determine which dataset files to load based on client_id
     train_file = f"{client_id}_train.txt"
@@ -1293,7 +1902,7 @@ def start_client(
         test_file = "client-1_test.txt"
 
     # Load dataset
-    train_loader, test_loader = load_dataset_from_files(train_file, test_file)
+    train_loader, test_loader, input_dim, output_dim = load_dataset_from_files(train_file, test_file)
     
     # Create client
     client = GAStackingClient(
@@ -1340,7 +1949,6 @@ if __name__ == "__main__":
     parser.add_argument("--ga-population-size", type=int, default=30, help="Size of GA population")
     parser.add_argument("--train-file", type=str, help="Path to training data file")
     parser.add_argument("--test-file", type=str, help="Path to test data file")
-    
     args = parser.parse_args()
     
     # Check if contract address is stored in file
@@ -1356,6 +1964,7 @@ if __name__ == "__main__":
     if args.train_file and args.test_file:
         train_file = args.train_file
         test_file = args.test_file
+    
     start_client(
         server_address=args.server_address,
         ipfs_url=args.ipfs_url,
@@ -1370,4 +1979,5 @@ if __name__ == "__main__":
         device=args.device,
         ga_generations=args.ga_generations,
         ga_population_size=args.ga_population_size
+        
     )

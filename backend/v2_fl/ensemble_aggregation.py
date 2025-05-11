@@ -418,5 +418,3 @@ class EnsembleAggregator:
         weighted_metrics["num_clients"] = len(results)
         
         return weighted_losses, weighted_metrics
-    
-    

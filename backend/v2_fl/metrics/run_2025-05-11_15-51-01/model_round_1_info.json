@@ -1,0 +1,34 @@
+{
+  "model_id": "0xf8591c14ef7d5067392d4f878d5215f9caf970bed0a43fb8442bae4e63540d33",
+  "ipfs_hash": "QmdHFDBxK1jShDVEGXf4o42SzMabyi5Vo2prusweDm4xGL",
+  "round": "1.0.0511-3461.1",
+  "version": 1746953462,
+  "timestamp": 0,
+  "participating_clients": "0x8c11123e02617Fda3B2bD8691B9965796b7c1257",
+  "model_info": {
+    "round": 1,
+    "timestamp": "2025-05-11T08:51:01.659567+00:00",
+    "version": "1.0.0511-3461.1",
+    "version_data": {
+      "version": "1.0.0511-3461.1",
+      "base_version": "1.0",
+      "session_id": 1746953461,
+      "session_tag": "0511-3461",
+      "round": 1,
+      "timestamp": "2025-05-11T08:51:01.659551+00:00"
+    },
+    "is_ensemble": true,
+    "task_type": "fraud_detection",
+    "num_models": 8,
+    "model_names": [
+      "lr",
+      "svc",
+      "rf",
+      "xgb",
+      "lgbm",
+      "catboost",
+      "knn",
+      "meta_lr"
+    ]
+  }
+}

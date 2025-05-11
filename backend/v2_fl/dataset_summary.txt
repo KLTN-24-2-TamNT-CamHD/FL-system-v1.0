@@ -1,33 +1,38 @@
-Kaggle Diabetes Dataset - Balanced Overlapping Split
-Total samples: 768
-Features: Pregnancies, Glucose, BloodPressure, SkinThickness, Insulin, BMI, DiabetesPedigreeFunction, Age
-Overall diabetes rate: 34.90%
+Credit Card Fraud Detection Dataset - by_feature Split
+Total samples: 1296675
+Features: 77
+Fraud cases: 7506 (0.58%)
+
+Balance method: SMOTE with ratio 0.1
 
 Client Summaries:
 
 client-1:
-  - Split type: balanced-overlapping
-  - Overlap percentage: 30%
-  - Glucose range: -3.78 to 2.44
-  - Class distribution: 215 non-diabetic, 115 diabetic
-  - Diabetes rate: 34.85%
-  - Train samples: 264
-  - Test samples: 66
+  - Feature range: 0.00 to 0.00
+  - Original fraud ratio: 0.36%
+  - Train fraud ratio: 9.09%
+  - Test fraud ratio: 0.40%
+  - Train samples: 54782
+  - Test samples: 10000
+  - Train fraud cases: 4980
+  - Test fraud cases: 40
 
 client-2:
-  - Split type: balanced-overlapping
-  - Overlap percentage: 30%
-  - Glucose range: -3.78 to 2.44
-  - Class distribution: 214 non-diabetic, 115 diabetic
-  - Diabetes rate: 34.95%
-  - Train samples: 263
-  - Test samples: 66
+  - Feature range: 0.00 to 0.00
+  - Original fraud ratio: 0.02%
+  - Train fraud ratio: 9.09%
+  - Test fraud ratio: 0.03%
+  - Train samples: 54992
+  - Test samples: 10000
+  - Train fraud cases: 4999
+  - Test fraud cases: 3
 
 client-3:
-  - Split type: balanced-overlapping
-  - Overlap percentage: 30%
-  - Glucose range: -3.78 to 2.38
-  - Class distribution: 217 non-diabetic, 116 diabetic
-  - Diabetes rate: 34.83%
-  - Train samples: 266
-  - Test samples: 67
+  - Feature range: 0.00 to 1.03
+  - Original fraud ratio: 1.36%
+  - Train fraud ratio: 9.09%
+  - Test fraud ratio: 1.29%
+  - Train samples: 54228
+  - Test samples: 10000
+  - Train fraud cases: 4929
+  - Test fraud cases: 129
