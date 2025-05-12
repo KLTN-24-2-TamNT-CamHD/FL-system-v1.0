@@ -763,12 +763,14 @@ class BlockchainConnector:
             # return True
             return False
     
-    def get_round_contributions(self, round_num: int) -> List[Dict[str, Any]]:
+    def get_round_contributions(self, round_num: int, offset: int = 0, limit: int = 100) -> List[Dict[str, Any]]:
         """
-        Get contributions for a specific round.
+        Get contributions for a specific round with pagination support.
         
         Args:
             round_num: Federated learning round number
+            offset: Starting index for pagination
+            limit: Maximum number of records to return
             
         Returns:
             List of contribution records for the round
@@ -776,18 +778,23 @@ class BlockchainConnector:
         if not self.contract:
             raise RuntimeError("Contract not loaded")
         
-        records = self.contract.functions.getRoundContributions(round_num).call()
-        
-        result = []
-        for i in range(len(records[0])):
-            result.append({
-                "client_address": records[0][i],
-                "accuracy": records[1][i] / 100.0,  # Convert back to decimal
-                "score": records[2][i],
-                "rewarded": records[3][i]
-            })
-        
-        return result
+        try:
+            # Call with pagination parameters
+            records = self.contract.functions.getRoundContributions(round_num, offset, limit).call()
+            
+            result = []
+            for i in range(len(records[0])):
+                result.append({
+                    "client_address": records[0][i],
+                    "accuracy": records[1][i] / 100.0,  # Convert back to decimal
+                    "score": records[2][i],
+                    "rewarded": records[3][i]
+                })
+            
+            return result
+        except Exception as e:
+            self.logger.error(f"Error getting round contributions for round {round_num}: {e}")
+            return []
     
     def get_model_details(self, ipfs_hash: str, round_num: int) -> Dict[str, Any]:
         """

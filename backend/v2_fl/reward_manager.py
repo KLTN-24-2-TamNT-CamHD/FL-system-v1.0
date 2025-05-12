@@ -448,7 +448,7 @@ class FLAggregatorWithRewards:
         reward_info = self.reward_manager.get_reward_pool_info(round_number)
         
         # Get contributions
-        contributions = self.reward_manager.get_round_contributions(round_number)
+        contributions = self.reward_manager.get_round_contributions(round_number, 0, 100)
         
         # Combine the information
         stats = {

@@ -63,7 +63,20 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
         self.blockchain = blockchain_connector
         
         # Set version prefix
-        self.version_prefix = version_prefix
+        self.base_version_prefix = version_prefix
+        
+        # Generate session-specific versioning
+        timestamp = int(time.time())
+        self.session_id = timestamp
+        readable_date = datetime.now().strftime("%m%d")
+        # Format: MMDD-last4digits of timestamp
+        self.session_tag = f"{readable_date}-{str(timestamp)[-4:]}"
+        
+        # Create the full version prefix (base.session)
+        self.version_prefix = f"{self.base_version_prefix}.{self.session_tag}"
+        
+        logger.info(f"Initialized with version strategy: base={self.base_version_prefix}, session={self.session_tag}")
+        
         
         # Flag to only allow authorized clients
         self.authorized_clients_only = authorized_clients_only
@@ -83,14 +96,44 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
         # Ensemble aggregator
         self.ensemble_aggregator = EnsembleAggregator(device=device)
         
+        self.reward_system = GAStackingRewardSystem(self.blockchain)
+        
         # Load authorized clients from blockchain
         self._load_authorized_clients()
+        
+        num_rounds = kwargs.get('num_rounds', 3)  # Default to 3 rounds if not specified
+        if hasattr(self, "blockchain") and self.blockchain:
+            self.initialize_reward_pools(num_rounds)
         
         logger.info(f"Initialized EnhancedFedAvgWithGA with IPFS node: {self.ipfs.ipfs_api_url}")
         if self.blockchain:
             logger.info(f"Blockchain integration enabled")
             if self.authorized_clients_only:
                 logger.info(f"Only accepting contributions from authorized clients ({len(self.authorized_clients)} loaded)")
+    
+    def initialize_reward_pools(self, num_rounds):
+        """Initialize reward pools for the specified number of rounds."""
+        if not self.reward_system:
+            return
+        try:
+            logger.info(f"Initializing reward pools for {num_rounds} rounds")
+            
+            for round_num in range(1, num_rounds + 1):
+                # Calculate reward amount
+                base_amount = 0.1
+                increment = 0.02
+                reward_amount = base_amount + (round_num - 1) * increment
+                
+                # Fund the pool without finalizing
+                tx_hash = self.blockchain.fund_round_reward_pool(round_num, reward_amount)
+                
+                if tx_hash:
+                    logger.info(f"Round {round_num} reward pool initialized with {reward_amount} ETH, tx: {tx_hash}")
+                else:
+                    logger.warning(f"Failed to initialize round {round_num} reward pool")
+                    
+        except Exception as e:
+            logger.error(f"Error initializing reward pools: {e}")
     
     def _load_authorized_clients(self):
         """Load authorized clients from blockchain."""
@@ -442,7 +485,6 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
 
         # Initialize GA-Stacking reward system if not already done
         if not hasattr(self, "reward_system") and hasattr(self, "blockchain"):
-            self.reward_system = GAStackingRewardSystem(self.blockchain)
             # Fund the reward pool for this round
             try:
                 reward_amount = 0.1 + (server_round - 1) * 0.02  # Increase rewards with rounds
@@ -940,6 +982,67 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
                     
         except Exception as e:
             logger.error(f"Failed to save model history: {e}")
+
+    # Model versioning strategy
+    def get_version_strategy(self, server_round: int) -> dict:
+        """
+        Generate a comprehensive version strategy with metadata.
+        
+        Args:
+            server_round: Current federated learning round
+            
+        Returns:
+            Dictionary with version string and metadata
+        """
+        # Generate a session ID based on timestamp if not already set
+        if not hasattr(self, 'session_id'):
+            # Create a short, human-readable session ID
+            timestamp = int(time.time())
+            self.session_id = timestamp
+            readable_date = datetime.now().strftime("%m%d")
+            # Format: MMDD-last4digits of timestamp
+            self.session_tag = f"{readable_date}-{str(timestamp)[-4:]}"
+            
+            # Generate a short hash of training parameters for uniqueness
+            config_hash = hashlib.md5(
+                f"{self.min_fit_clients}_{self.min_evaluate_clients}_{self.version_prefix}".encode()
+            ).hexdigest()[:4]
+            
+            # Store original version prefix
+            self.base_version_prefix = self.version_prefix
+            
+            # Update version prefix to include session info
+            # Format: original_prefix.sessiontag
+            self.version_prefix = f"{self.base_version_prefix}.{self.session_tag}"
+        
+        # Generate full version with round number
+        # Format: original_prefix.sessiontag.round
+        version = f"{self.version_prefix}.{server_round}"
+        
+        # Create version metadata
+        version_data = {
+            "version": version,
+            "base_version": self.base_version_prefix,
+            "session_id": self.session_id,
+            "session_tag": self.session_tag,
+            "round": server_round,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        
+        return version_data
+
+    def get_version(self, server_round: int) -> str:
+        """
+        Generate a version string based on round number (backward compatible).
+        
+        Args:
+            server_round: Current federated learning round
+            
+        Returns:
+            Version string
+        """
+        version_data = self.get_version_strategy(server_round)
+        return version_data["version"]
 
 def start_server(
     server_address: str = "0.0.0.0:8080",

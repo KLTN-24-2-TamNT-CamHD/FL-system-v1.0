@@ -8,6 +8,8 @@ import logging
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Union, Any
 from collections import defaultdict
+from ga_stacking_reward_system import GAStackingRewardSystem
+
 
 import torch
 import torch.nn as nn

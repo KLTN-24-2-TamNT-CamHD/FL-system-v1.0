@@ -1,0 +1,26 @@
+{
+  "round": 2,
+  "metrics": {
+    "num_ensembles": 1,
+    "num_models": 8,
+    "model_names": "catboost,knn,lgbm,lr,meta_lr,rf,svc,xgb",
+    "ensemble_weights": [
+      0.053174179775906966,
+      0.061734995709708126,
+      0.0,
+      0.25633736103483057,
+      0.03068849795586765,
+      0.5155072119514557,
+      0.012633782824650332,
+      0.06992397074758067
+    ],
+    "total_clients": 1,
+    "authorized_clients": 1,
+    "unauthorized_clients": 0,
+    "ga_stacking_avg_score": 0,
+    "ga_stacking_score_range": 0,
+    "ga_stacking_reward_participants": 0
+  },
+  "num_clients": 1,
+  "timestamp": "2025-05-12T12:33:58.201487+00:00"
+}

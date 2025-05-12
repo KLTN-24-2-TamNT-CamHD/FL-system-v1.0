@@ -536,7 +536,7 @@ class EnsembleModel(nn.Module):
                 meta_learner_input = torch.cat(base_model_outputs, dim=1)
                 
                 # Explicitly log the dimensions to verify
-                logger.info(f"Meta-learner input shape: {meta_learner_input.shape} - correct format for meta-learners")
+                logger.debug(f"Meta-learner input shape: {meta_learner_input.shape} - correct format for meta-learners")
                 
                 # Process through each meta-learner
                 for i, model in enumerate(meta_models):

@@ -1,0 +1,46 @@
+{
+  "0xc32284Dd2425df502C5bB5e4D99522E5758461b5": {
+    "details": {
+      "contribution_count": 0,
+      "total_score": 0,
+      "is_authorized": true,
+      "last_contribution_timestamp": 0,
+      "rewards_earned": 0,
+      "rewards_claimed": false
+    },
+    "records": []
+  },
+  "0x790dD88E916D4CA0bc24dc5b6BCA371A86D2B8E7": {
+    "details": {
+      "contribution_count": 3,
+      "total_score": 247,
+      "is_authorized": true,
+      "last_contribution_timestamp": 1747059985,
+      "rewards_earned": 0,
+      "rewards_claimed": false
+    },
+    "records": [
+      {
+        "round": 1,
+        "accuracy": 82.49,
+        "score": 82,
+        "timestamp": 1747059835,
+        "rewarded": false
+      },
+      {
+        "round": 2,
+        "accuracy": 83.03,
+        "score": 83,
+        "timestamp": 1747059915,
+        "rewarded": false
+      },
+      {
+        "round": 3,
+        "accuracy": 82.61,
+        "score": 82,
+        "timestamp": 1747059985,
+        "rewarded": false
+      }
+    ]
+  }
+}

@@ -45,7 +45,7 @@ import numpy as np
 from ipfs_connector import IPFSConnector
 from blockchain_connector import BlockchainConnector
 from ga_stacking import GAStacking, EnsembleModel
-from base_models import create_model_ensemble, get_ensemble_state_dict, load_ensemble_from_state_dict, create_model_ensemble_from_config, SklearnModelWrapper, MetaLearnerWrapper
+from base_models import create_model_ensemble, get_ensemble_state_dict, load_ensemble_from_state_dict, create_model_ensemble_from_config, SklearnModelWrapper, MetaLearnerWrapper, LinearRegressionWrapper, SVCWrapper, RandomForestWrapper, GradientBoostingWrapper, LinearModel
 
 # Configure logging
 logging.basicConfig(

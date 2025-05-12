@@ -1,0 +1,29 @@
+[
+  {
+    "round": 1,
+    "fit_loss": 0.004393350801093038,
+    "accuracy": 99.6,
+    "ensemble_weights": [
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125
+    ],
+    "ipfs_hash": "QmaoDzxEtZkW3do25A1wL5iTMR6UueDYJ7toPQ47M2TXW5",
+    "wallet_address": "0x73CDd275BeB83388A2eB8A6b10C5E1Db7b1f1e0b",
+    "timestamp": "2025-05-12T14:36:30.472099+00:00",
+    "ga_stacking_metrics": {
+      "ensemble_accuracy": 0.907082876962395,
+      "diversity_score": 0.666779675620741,
+      "generalization_score": 0.9898854376810746,
+      "convergence_rate": 0.5,
+      "avg_base_model_score": 0.7028634016585824,
+      "accuracy_bonus": 0.010624315443592436,
+      "final_score": 8250
+    }
+  }
+]

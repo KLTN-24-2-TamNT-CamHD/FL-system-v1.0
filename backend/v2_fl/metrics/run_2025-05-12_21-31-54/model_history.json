@@ -1,0 +1,29 @@
+[
+  {
+    "model_id": "0xa3071b9b894394e6c26453a9957b2bbf2ab97fa56ea4d3908e1109543a3cd6c2",
+    "ipfs_hash": "QmVc97NLq75Wr1rHU7WmekeLt9PDa3dANW5bsCCMkbnb5v",
+    "round": 1,
+    "timestamp": 1747060314,
+    "participating_clients": 0,
+    "is_active": true,
+    "version": "1.0.0512-0314.1"
+  },
+  {
+    "model_id": "0x24334d3c0086d0cba54708a98b5628bb6fd5e25402eb1592268c6a1a0bcc4581",
+    "ipfs_hash": "QmbEtTUX2rHcwkp6qn2hEXRbrtvEVte2cHCTNKo6fAfyRE",
+    "round": 2,
+    "timestamp": 1747060382,
+    "participating_clients": 0,
+    "is_active": true,
+    "version": "1.0.0512-0314.2"
+  },
+  {
+    "model_id": "0x8f62a0a4b78ac62c9525242950318effa6b1d9333704900cbb915b9d227792b5",
+    "ipfs_hash": "QmVNjgvsiXzGWfFSfZUKrsQQ1ibrNGA8pZpbUdjRXiUA3w",
+    "round": 3,
+    "timestamp": 1747060441,
+    "participating_clients": 0,
+    "is_active": true,
+    "version": "1.0.0512-0314.3"
+  }
+]

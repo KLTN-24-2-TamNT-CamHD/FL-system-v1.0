@@ -1,0 +1,56 @@
+{
+  "0xEE38aEe1897bA049cd8A25BAf18bA3c225D53b48": {
+    "details": {
+      "contribution_count": 6,
+      "total_score": 49839,
+      "is_authorized": true,
+      "last_contribution_timestamp": 1747052051,
+      "rewards_earned": 0,
+      "rewards_claimed": false
+    },
+    "records": [
+      {
+        "round": 1,
+        "accuracy": 8297.0,
+        "score": 8297,
+        "timestamp": 1747051552,
+        "rewarded": false
+      },
+      {
+        "round": 2,
+        "accuracy": 8302.0,
+        "score": 8302,
+        "timestamp": 1747051605,
+        "rewarded": false
+      },
+      {
+        "round": 3,
+        "accuracy": 8335.0,
+        "score": 8335,
+        "timestamp": 1747051657,
+        "rewarded": false
+      },
+      {
+        "round": 1,
+        "accuracy": 8409.0,
+        "score": 8409,
+        "timestamp": 1747051948,
+        "rewarded": false
+      },
+      {
+        "round": 2,
+        "accuracy": 8233.0,
+        "score": 8233,
+        "timestamp": 1747051999,
+        "rewarded": false
+      },
+      {
+        "round": 3,
+        "accuracy": 8263.0,
+        "score": 8263,
+        "timestamp": 1747052051,
+        "rewarded": false
+      }
+    ]
+  }
+}
