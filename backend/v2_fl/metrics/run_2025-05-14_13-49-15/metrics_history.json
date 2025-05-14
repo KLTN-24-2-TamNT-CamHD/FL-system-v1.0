@@ -1,0 +1,149 @@
+[
+  {
+    "round": 1,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,isolation_forest,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.006518770169063618,
+        0.06347176119884998,
+        0.33617727468664227,
+        0.0,
+        0.09136701781350792,
+        0.4642622891818851,
+        0.021111572983571796,
+        0.017091313966479265
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 85.09302325581395,
+      "ga_stacking_score_range": 54,
+      "ga_stacking_reward_participants": 43
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T06:49:35.689693+00:00"
+  },
+  {
+    "round": 1,
+    "eval_loss": NaN,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 99.73333333333333,
+      "loss": NaN,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 99.73333333333333
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T06:49:37.106756+00:00"
+  },
+  {
+    "round": 2,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,isolation_forest,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.04740022612595378,
+        0.3368468233179141,
+        0.024321575516518524,
+        0.04577839331936969,
+        0.24144251237090333,
+        0.055160448490620316,
+        0.04297863566992139,
+        0.20607138518879883
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 87.56756756756756,
+      "ga_stacking_score_range": 54,
+      "ga_stacking_reward_participants": 37
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T06:49:54.467861+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": NaN,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 99.73333333333333,
+      "loss": NaN,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 99.73333333333333
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T06:49:55.889269+00:00"
+  },
+  {
+    "round": 3,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,isolation_forest,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.25704289008659376,
+        0.009222889252031461,
+        0.25638863585263694,
+        0.18165480308451654,
+        0.0,
+        0.2257028915148094,
+        0.02256649270952068,
+        0.04742139749989111
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 87.36111111111111,
+      "ga_stacking_score_range": 54,
+      "ga_stacking_reward_participants": 36
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T06:50:13.195943+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": NaN,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 99.73333333333333,
+      "loss": NaN,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 99.73333333333333
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T06:50:22.944671+00:00"
+  }
+]

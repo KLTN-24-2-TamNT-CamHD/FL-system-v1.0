@@ -18,6 +18,52 @@ logging.basicConfig(
 )
 logger = logging.getLogger("BaseModels")
 
+def _handle_nans(x):
+    """Handle NaN values in input data."""
+    if isinstance(x, torch.Tensor):
+        return torch.where(torch.isnan(x), torch.zeros_like(x), x)
+    else:
+        return np.nan_to_num(x, nan=0.0)
+
+def _fix_dimensions(x, expected_dim, model_name="unknown"):
+    """
+    Ensure input matches expected dimensions.
+    
+    Args:
+        x: Input tensor or array
+        expected_dim: Expected feature dimension
+        model_name: Name of model for logging
+    
+    Returns:
+        Resized tensor or array
+    """
+    # Convert to numpy if it's a tensor
+    is_tensor = isinstance(x, torch.Tensor)
+    if is_tensor:
+        device = x.device
+        dtype = x.dtype
+        x_np = x.detach().cpu().numpy()
+    else:
+        x_np = x
+
+    # No need to fix if dimensions already match
+    if x_np.shape[1] == expected_dim:
+        return x
+
+    logger.warning(f"Dimension mismatch for {model_name}: got {x_np.shape[1]}, expected {expected_dim}")
+    
+    # Create a new array with correct dimensions
+    batch_size = x_np.shape[0]
+    x_fixed = np.zeros((batch_size, expected_dim))
+    
+    # Copy data (either truncate or partially fill)
+    copy_dim = min(x_np.shape[1], expected_dim)
+    x_fixed[:, :copy_dim] = x_np[:, :copy_dim]
+    
+    # Convert back to tensor if needed
+    if is_tensor:
+        return torch.tensor(x_fixed, device=device, dtype=dtype)
+    return x_fixed
 
 class LinearModel(nn.Module):
     """Simple linear model."""
@@ -71,24 +117,28 @@ class SklearnModelWrapper(nn.Module):
         self.output_dim = output_dim
         self.model = None
         self.is_initialized = False
+    
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass for the wrapped model."""
-        # Convert PyTorch tensor to numpy if needed
+        """Forward pass with robust dimension handling and NaN fixing."""
+        # First, handle NaN values
+        x = _handle_nans(x)
+        
+        # Convert to numpy if needed
         if isinstance(x, torch.Tensor):
             x_np = x.detach().cpu().numpy()
+            device = x.device
         else:
             x_np = x
+            device = "cpu"
             
-        # Reshape if needed
-        if len(x_np.shape) == 3 and x_np.shape[1] == 1:
-            # Handle case where input is [batch_size, 1, features]
-            x_np = x_np.squeeze(1)
+        # Fix dimensions
+        x_np = _fix_dimensions(x_np, self.input_dim, self.model_type)
             
         # Make prediction
         if not self.is_initialized:
             # Return zeros if model is not initialized
             if isinstance(x, torch.Tensor):
-                return torch.zeros(x.shape[0], self.output_dim, device=x.device)
+                return torch.zeros(x.shape[0], self.output_dim, device=device)
             else:
                 return np.zeros((x_np.shape[0], self.output_dim))
             
@@ -105,7 +155,7 @@ class SklearnModelWrapper(nn.Module):
                 
             # Convert back to torch tensor if input was tensor
             if isinstance(x, torch.Tensor):
-                y_pred = torch.tensor(y_pred, dtype=torch.float32, device=x.device)
+                y_pred = torch.tensor(y_pred, dtype=torch.float32, device=device)
                 
             return y_pred
             
@@ -113,7 +163,7 @@ class SklearnModelWrapper(nn.Module):
             logger.error(f"Error in forward pass for {self.model_type}: {e}")
             # Return zeros as fallback
             if isinstance(x, torch.Tensor):
-                return torch.zeros(x.shape[0], self.output_dim, device=x.device)
+                return torch.zeros(x.shape[0], self.output_dim, device=device)
             else:
                 return np.zeros((x_np.shape[0], self.output_dim))
 
@@ -130,8 +180,8 @@ class LinearRegressionWrapper(SklearnModelWrapper):
         self.model = LinearRegression()
         
         # Initialize coefficients with correct dimensions
-        self.coef_ = np.zeros((output_dim, input_dim))
-        self.intercept_ = np.zeros(output_dim)
+        self.model.coef_ = np.random.normal(0, 0.01, (output_dim, input_dim))
+        self.model.intercept_ = np.random.normal(0, 0.01, (output_dim,))
         
         # Mark as initialized to avoid errors
         self.is_initialized = True
@@ -240,69 +290,32 @@ class LinearRegressionWrapper(SklearnModelWrapper):
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass with improved dimension handling."""
-        try:
-            # Convert to numpy if needed
-            if isinstance(x, torch.Tensor):
-                x_np = x.detach().cpu().numpy()
-            else:
-                x_np = x
-                
-            # Check if _actual_input_dim is corrupted (sanity check)
-            if self._actual_input_dim > 1000 and x_np.shape[1] < 1000:
-                logger.error(f"_actual_input_dim appears corrupted: {self._actual_input_dim}. " +
-                        f"Forcing reinitialize to match input shape {x_np.shape[1]}")
-                # Force reinitialize the coefficients to match input shape
-                self.coef_ = np.zeros((self.output_dim, x_np.shape[1]))
-                self._actual_input_dim = x_np.shape[1]
-                self.model.coef_ = self.coef_
-                logger.info(f"Model coefficients reinitialized to shape {self.coef_.shape}")
-                
-            # CRITICAL FIX - Check dimensions and adapt if needed
-            if x_np.shape[1] != self._actual_input_dim:
-                logger.warning(f"Input dimension mismatch in forward pass: " +
-                            f"got {x_np.shape[1]}, expected {self._actual_input_dim}")
-                
-                # Two cases to handle:
-                # 1. Input is smaller than expected: Pad with zeros
-                # 2. Input is larger than expected: Truncate
-                
-                if self._actual_input_dim > 1000:
-                    # This is likely an error condition - reinitialize model
-                    logger.error(f"Model dimension corrupted ({self._actual_input_dim} > 1000). " +
-                            f"Forcing reinitialize to match input")
-                    self.coef_ = np.zeros((self.output_dim, x_np.shape[1])) 
-                    self._actual_input_dim = x_np.shape[1]
-                    self.model.coef_ = self.coef_
-                elif x_np.shape[1] < self._actual_input_dim:
-                    # Pad with zeros
-                    padding = np.zeros((x_np.shape[0], self._actual_input_dim - x_np.shape[1]))
-                    x_np = np.concatenate([x_np, padding], axis=1)
-                    logger.info(f"Padded input from shape {x_np.shape[1]} to {self._actual_input_dim}")
-                else:
-                    # Truncate
-                    x_np = x_np[:, :self._actual_input_dim]
-                    logger.info(f"Truncated input from shape {x_np.shape[1]} to {self._actual_input_dim}")
+        # Handle NaN values
+        x = _handle_nans(x)
+        
+        # Convert to numpy if needed
+        if isinstance(x, torch.Tensor):
+            x_np = x.detach().cpu().numpy()
+            device = x.device
+        else:
+            x_np = x
+            device = "cpu"
             
-            # Use direct matrix multiplication instead of model.predict for better control
-            y_pred = np.dot(x_np, self.coef_.T) + self.intercept_
+        # Fix dimensions
+        x_np = _fix_dimensions(x_np, self._actual_input_dim, "lr")
+        
+        # Use direct matrix multiplication
+        y_pred = np.dot(x_np, self.coef_.T) + self.intercept_
+        
+        # Ensure proper shape
+        if len(y_pred.shape) == 1:
+            y_pred = y_pred.reshape(-1, 1)
             
-            # Ensure proper shape
-            if len(y_pred.shape) == 1:
-                y_pred = y_pred.reshape(-1, 1)
-                
-            # Convert back to torch tensor if input was tensor
-            if isinstance(x, torch.Tensor):
-                y_pred = torch.tensor(y_pred, dtype=torch.float32, device=x.device)
-                
-            return y_pred
+        # Convert back to torch tensor if input was tensor
+        if isinstance(x, torch.Tensor):
+            y_pred = torch.tensor(y_pred, dtype=torch.float32, device=device)
             
-        except Exception as e:
-            logger.error(f"Error in forward pass for {self.model_type}: {e}")
-            # Return zeros as fallback
-            if isinstance(x, torch.Tensor):
-                return torch.zeros((x.shape[0], self.output_dim), device=x.device, dtype=torch.float32)
-            else:
-                return np.zeros((x.shape[0] if hasattr(x, 'shape') else 1, self.output_dim))
+        return y_pred
     
     def get_parameters(self) -> Dict[str, Any]:
         """Get model parameters as dictionary."""
@@ -464,13 +477,14 @@ class MetaLearnerWrapper(SklearnModelWrapper):
         
     def _initialize_model(self):
         try:
-            from sklearn.linear_model import LogisticRegression
+            # Use HistGradientBoostingClassifier instead of LogisticRegression
+            # to handle NaN values natively
+            from sklearn.ensemble import HistGradientBoostingClassifier
             
-            self.model = LogisticRegression(
-                penalty='l2',
-                C=1.0,
-                solver='liblinear', 
-                max_iter=1000,
+            self.model = HistGradientBoostingClassifier(
+                learning_rate=0.1,
+                max_depth=3,
+                max_iter=100,
                 random_state=42
             )
             
@@ -479,19 +493,21 @@ class MetaLearnerWrapper(SklearnModelWrapper):
             dummy_y = np.random.randint(0, 2, 10)
             self.model.fit(dummy_X, dummy_y)
             
-            # Initialize weights for the PyTorch layer - explicitly with float32
+            # Initialize weights for the PyTorch layer
             with torch.no_grad():
                 # Initialize with equal weights
-                self.linear.weight.data = torch.ones_like(self.linear.weight.data, dtype=torch.float32) * (1.0 / self.input_dim)
-                self.linear.bias.data = torch.ones_like(self.linear.bias.data, dtype=torch.float32) * (-0.1)
+                self.linear.weight.data = torch.ones_like(
+                    self.linear.weight.data, dtype=torch.float32) * (1.0 / self.input_dim)
+                self.linear.bias.data = torch.ones_like(
+                    self.linear.bias.data, dtype=torch.float32) * (-0.1)
             
             self.is_initialized = True
         except Exception as e:
             logging.error(f"Error initializing meta-learner model: {e}")
             # Initialize with basic weights even if sklearn initialization fails
             with torch.no_grad():
-                self.linear.weight.data = torch.ones_like(self.linear.weight.data, dtype=torch.float32) * (1.0 / self.input_dim)
-                self.linear.bias.data = torch.ones_like(self.linear.bias.data, dtype=torch.float32) * (-0.1)
+                self.linear.weight.data.fill_(1.0 / self.input_dim)
+                self.linear.bias.data.fill_(-0.1)
             self.is_initialized = True
     
     def set_parameters(self, params: Dict[str, Any]) -> None:
@@ -544,7 +560,10 @@ class MetaLearnerWrapper(SklearnModelWrapper):
             self.is_initialized = True
     
     def forward(self, x):
-        """Forward pass with improved handling for dimension mismatches"""
+        """Forward pass with improved handling for dimension mismatches and NaNs"""
+        # Handle NaN values
+        x = _handle_nans(x)
+        
         # Convert input to tensor with consistent type if needed
         if not isinstance(x, torch.Tensor):
             x = torch.tensor(x, dtype=torch.float32)
@@ -552,62 +571,18 @@ class MetaLearnerWrapper(SklearnModelWrapper):
             # Always ensure the input is float32
             x = x.to(dtype=torch.float32)
                 
-        # Handle dimension mismatch
+        # Fix dimensions if needed
         if x.shape[1] != self.input_dim:
-            logger.warning(f"Input dimension mismatch in meta-learner: got {x.shape[1]}, expected {self.input_dim}")
-                
-            # Special case: we're receiving raw features but expecting base model predictions
-            if x.shape[1] == 77 and self.expected_input_dim == 7:
-                logger.warning("Meta-learner receiving raw features instead of base model predictions")
-                    
-                # Instead of creating a temporary layer, we should return zeros 
-                # because this is fundamentally an error case - meta-learner should ONLY 
-                # receive base model predictions, not raw features
-                return torch.zeros(x.shape[0], self.output_dim, 
-                                device=x.device, dtype=torch.float32)
-                
-            # Other dimension mismatch cases (when we get more models than expected)
-            # should be handled by properly resizing the layer
-            try:
-                # If input dim is close to expected (maybe due to adding a few models)
-                if abs(x.shape[1] - self.input_dim) < 10:
-                    # Recreate the linear layer with correct dimensions and explicit dtype
-                    new_linear = nn.Linear(x.shape[1], self.output_dim, 
-                                        device=x.device, dtype=torch.float32)
-                    
-                    # Initialize with equal weights - explicit dtype
-                    with torch.no_grad():
-                        new_linear.weight.data = torch.ones_like(
-                            new_linear.weight.data, dtype=torch.float32) * (1.0 / x.shape[1])
-                        new_linear.bias.data = torch.zeros_like(
-                            new_linear.bias.data, dtype=torch.float32)
-                    
-                    # Replace the layer
-                    self.linear = new_linear
-                    
-                    # Update our internal state
-                    self.input_dim = x.shape[1]
-                    logger.info(f"Resized meta-learner input dimension to {x.shape[1]}")
-                else:
-                    # If difference is too large, this is likely an error rather than
-                    # just a small change in number of base models
-                    logger.error(f"Input dimension mismatch too large: got {x.shape[1]}, expected {self.input_dim}")
-                    return torch.zeros(x.shape[0], self.output_dim, 
-                                    device=x.device, dtype=torch.float32)
-            except Exception as e:
-                logger.error(f"Error resizing meta-learner: {e}")
-                # Return zeros as fallback
-                return torch.zeros(x.shape[0], self.output_dim, 
-                                device=x.device, dtype=torch.float32)
+            # Instead of just warning, fix the dimensions
+            x = torch.tensor(_fix_dimensions(x, self.input_dim, "meta_learner"), 
+                            dtype=torch.float32, device=x.device)
             
         # Actual forward pass - ensure both layer and input use float32
         try:
-            # Make sure input is float32
-            x_float32 = x.to(dtype=torch.float32)
             # Make sure linear layer weights are float32
             self.linear = self.linear.to(dtype=torch.float32)
             
-            return torch.sigmoid(self.linear(x_float32))
+            return torch.sigmoid(self.linear(x))
         except Exception as e:
             logger.error(f"Error in meta-learner forward pass: {e}")
             # Return zeros as fallback
@@ -630,7 +605,7 @@ class GradientBoostingWrapper(SklearnModelWrapper):
         self.max_depth = 3
         self.feature_importances_ = np.ones(input_dim) / input_dim
         self.is_initialized = False
-        
+    
     def set_parameters(self, params: Dict[str, Any]) -> None:
         """Set model parameters from dictionary."""
         if "n_estimators" in params and "feature_importances" in params:
@@ -645,50 +620,50 @@ class GradientBoostingWrapper(SklearnModelWrapper):
                     logger.warning(f"Feature importances dimension mismatch for GBM. Expected {self.input_dim}, got {len(feature_importances)}")
                     feature_importances = np.ones(self.input_dim) / self.input_dim
                 
-                # Create a new model with the specified parameters
-                from sklearn.ensemble import GradientBoostingRegressor
-                self.model = GradientBoostingRegressor(
-                    n_estimators=self.n_estimators,
+                # Create a new model with HistGradientBoostingClassifier instead
+                from sklearn.ensemble import HistGradientBoostingClassifier
+                self.model = HistGradientBoostingClassifier(
+                    max_iter=self.n_estimators,
                     learning_rate=self.learning_rate,
-                    max_depth=self.max_depth
+                    max_depth=self.max_depth,
+                    random_state=42
                 )
+                
+                # Pre-fit with dummy data to avoid "not fitted" errors
+                dummy_X = np.random.rand(10, self.input_dim)
+                dummy_y = np.random.randint(0, 2, 10)
+                self.model.fit(dummy_X, dummy_y)
                 
                 # Store feature importances on the wrapper, not directly on the model
                 self.feature_importances_ = feature_importances
-                
-                # Override predict to use our feature importances
-                self._original_predict = self.model.predict
-                
-                def custom_predict(X):
-                    # Apply feature importance weighting
-                    if len(X.shape) == 1:
-                        # Handle single sample
-                        X_weighted = X * self.feature_importances_
-                    else:
-                        # Handle batch of samples
-                        X_weighted = X * self.feature_importances_
-                    
-                    # Simple weighted prediction
-                    # More sophisticated approach would be to use actual GBM with these feature importances
-                    # But this simplified version helps maintain compatibility with the architecture
-                    weighted_sum = np.sum(X_weighted, axis=1)
-                    
-                    # Apply sigmoid to get values in 0-1 range (for classification tasks)
-                    if self.output_dim == 1:
-                        sigmoid = lambda x: 1 / (1 + np.exp(-x))
-                        return sigmoid(weighted_sum).reshape(-1, 1)
-                    else:
-                        # For multi-output, normalize across outputs
-                        return np.tile(weighted_sum, (self.output_dim, 1)).T
-                    
-                # Monkey patch the method
-                self.model.predict = custom_predict
                 
                 self.is_initialized = True
                 
             except Exception as e:
                 logger.error(f"Error setting GBM parameters: {e}")
-            
+        
+        # If we get here without initializing the model, make sure it's properly initialized
+        if not self.is_initialized and hasattr(self, 'model'):
+            try:
+                # Initialize with HistGradientBoostingClassifier for better NaN handling
+                from sklearn.ensemble import HistGradientBoostingClassifier
+                self.model = HistGradientBoostingClassifier(
+                    max_iter=self.n_estimators,
+                    learning_rate=self.learning_rate,
+                    max_depth=self.max_depth,
+                    random_state=42
+                )
+                
+                # Pre-fit with dummy data to avoid "not fitted" errors
+                dummy_X = np.random.rand(10, self.input_dim)
+                dummy_y = np.random.randint(0, 2, 10)
+                self.model.fit(dummy_X, dummy_y)
+                
+                self.is_initialized = True
+                logger.info(f"Initialized GBM with HistGradientBoostingClassifier")
+            except Exception as e:
+                logger.error(f"Error initializing GBM model: {e}")
+           
     def get_parameters(self) -> Dict[str, Any]:
         """Get model parameters as dictionary."""
         return {
@@ -963,6 +938,28 @@ def create_model_ensemble(
         model.to(device)
         models.append(model)
         model_names.append(config["name"])
+    
+    for i, model in enumerate(models):
+        if model_names[i] in ["xgb", "lgbm", "catboost", "gbm"]:
+            # Make sure it's initialized with HistGradientBoostingClassifier
+            if hasattr(model, 'model'):
+                try:
+                    from sklearn.ensemble import HistGradientBoostingClassifier
+                    model.model = HistGradientBoostingClassifier(
+                        max_iter=model.n_estimators if hasattr(model, 'n_estimators') else 100,
+                        learning_rate=model.learning_rate if hasattr(model, 'learning_rate') else 0.1,
+                        max_depth=model.max_depth if hasattr(model, 'max_depth') else 3,
+                        random_state=42
+                    )
+                    
+                    # Pre-fit with dummy data
+                    dummy_X = np.random.rand(10, input_dim)
+                    dummy_y = np.random.randint(0, 2, 10)
+                    model.model.fit(dummy_X, dummy_y)
+                    model.is_initialized = True
+                    logger.info(f"Initialized {model_names[i]} with HistGradientBoostingClassifier")
+                except Exception as e:
+                    logger.error(f"Error initializing {model_names[i]}: {e}")
     
     return models, model_names
 

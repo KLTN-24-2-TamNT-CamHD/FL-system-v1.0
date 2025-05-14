@@ -10,8 +10,9 @@ import time
 from typing import Dict, List, Optional, Tuple, Union, Any, Set
 from datetime import datetime, timezone
 import logging
+import random
 from pathlib import Path
-
+import matplotlib.pyplot as plt
 import pytz
 
 import flwr as fl
@@ -32,6 +33,8 @@ from ipfs_connector import IPFSConnector
 from blockchain_connector import BlockchainConnector
 from ensemble_aggregation import EnsembleAggregator
 from ga_stacking_reward_system import GAStackingRewardSystem
+from monitoring import start_monitoring_server
+
 
 # Configure logging
 logging.basicConfig(
@@ -181,10 +184,10 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
     def initialize_parameters(
         self, client_manager: fl.server.client_manager.ClientManager
     ) -> Optional[Parameters]:
-        """Initialize global model parameters for fraud detection with optimized base models."""
+        """Initialize global model parameters for Credit Card Fraud detection with optimized base models."""
         
-        # Define the correct dimensions for the fraud detection dataset after preprocessing
-        input_dim = 77  # Based on your client logs showing 77 features
+        # Define the correct dimensions for the Credit Card Fraud dataset after preprocessing
+        input_dim = 31  # V1-V28 plus Amount and hour_of_day
         output_dim = 1  # Binary classification (0 = legitimate, 1 = fraud)
         
         # Create an ensemble of base models optimized for fraud detection
@@ -196,13 +199,13 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
             "model_type": "lr",
             "input_dim": input_dim,
             "output_dim": output_dim,
-            "coef": [[0.0] * input_dim],
-            "intercept": [0.0],
+            "coef": [[random.uniform(-0.01, 0.01) for _ in range(input_dim)]],
+            "intercept": [-3.0],  # Strong negative bias (fraud is extremely rare)
             "penalty": "l2",
-            "C": 1.0,  # Regularization strength
-            "class_weight": "balanced",  # Handle class imbalance
+            "C": 0.1,  # Stronger regularization for PCA-transformed features
+            "class_weight": {0: 1, 1: 100},  # Extreme imbalance needs stronger weight
             "solver": "liblinear",  # Good for small datasets
-            "max_iter": 1000,  # Increase iterations for convergence
+            "max_iter": 1000,
             "random_state": 42
         })
         
@@ -212,19 +215,18 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
             "model_type": "svc",
             "input_dim": input_dim,
             "output_dim": output_dim,
-            "kernel": "rbf",  # Radial basis function kernel
-            "C": 10.0,  # Higher C gives more importance to getting all fraud cases
-            "gamma": "scale",  # Kernel coefficient
-            "probability": True,  # Enable probability estimates
-            "class_weight": "balanced",  # Handle class imbalance
+            "kernel": "rbf",
+            "C": 100.0,  # Much higher C for extreme imbalance
+            "gamma": "auto",  # Better for PCA-transformed features
+            "probability": True,
+            "class_weight": {0: 1, 1: 100},  # More aggressive weighting
             "random_state": 42,
-            # Minimal initialization for the model (will be learned during training)
-            "dual_coef": [[0.1, -0.1]],
+            "dual_coef": [[0.01, -0.01]],
             "support_vectors": [
-                [0.01] * input_dim,
-                [-0.01] * input_dim
+                [random.uniform(-0.1, 0.1) for _ in range(input_dim)],
+                [random.uniform(-0.1, 0.1) for _ in range(input_dim)]
             ],
-            "intercept": [-0.1]  # Slight negative bias (fraud is rare)
+            "intercept": [-1.0]  # Stronger negative bias
         })
         
         # 3. Random Forest - handles non-linear relationships well
@@ -234,15 +236,16 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
             "input_dim": input_dim,
             "output_dim": output_dim,
             "n_estimators": 100,
-            "criterion": "gini",
-            "max_depth": 15,  # Deeper trees for complex patterns
-            "min_samples_split": 2,
-            "min_samples_leaf": 2,
-            "max_features": "sqrt",  # Use sqrt(n_features) for each tree
+            "criterion": "entropy",  # Better for highly imbalanced data
+            "max_depth": 10,  # Limit depth to avoid overfitting
+            "min_samples_split": 10,  # More conservative splits
+            "min_samples_leaf": 5,  # More samples per leaf
+            "max_features": 0.7,  # Use 70% of features for each tree
             "bootstrap": True,
-            "class_weight": "balanced_subsample",  # Handle class imbalance
+            "class_weight": {0: 1, 1: 100},  # Strong weighting for fraud class
             "random_state": 42,
-            "feature_importances": [1.0/input_dim] * input_dim
+            # V1-V4 typically carry more info in PCA transformed data
+            "feature_importances": [0.05, 0.05, 0.05, 0.05] + [(1.0-0.2)/27] * 27
         })
         
         # 4. XGBoost - typically performs well for fraud detection
@@ -252,14 +255,14 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
             "input_dim": input_dim,
             "output_dim": output_dim,
             "n_estimators": 100,
-            "max_depth": 6,
-            "learning_rate": 0.1,
+            "max_depth": 5,  # Slightly shallower for PCA data
+            "learning_rate": 0.05,  # Slower learning rate
             "subsample": 0.8,
             "colsample_bytree": 0.8,
             "objective": "binary:logistic",
-            "scale_pos_weight": 10.0,  # Adjust for class imbalance
+            "scale_pos_weight": 580,  # ~580:1 class imbalance
             "random_state": 42,
-            "feature_importances": [1.0/input_dim] * input_dim
+            "feature_importances": [0.05, 0.05, 0.05, 0.05] + [(1.0-0.2)/27] * 27
         })
         
         # 5. LightGBM - efficient gradient boosting implementation
@@ -269,48 +272,50 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
             "input_dim": input_dim,
             "output_dim": output_dim,
             "n_estimators": 100,
-            "max_depth": 8,
-            "learning_rate": 0.05,
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
+            "max_depth": 5,
+            "learning_rate": 0.03,  # Slower learning rate
+            "subsample": 0.7,
+            "colsample_bytree": 0.7,
             "objective": "binary",
-            "class_weight": "balanced",
-            "boosting_type": "gbdt",
+            "is_unbalance": True,  # Better than class_weight for extreme imbalance
+            "boosting_type": "dart",  # DART can work better for fraud
             "importance_type": "gain",
             "random_state": 42,
-            "feature_importances": [1.0/input_dim] * input_dim
+            "feature_importances": [0.05, 0.05, 0.05, 0.05] + [(1.0-0.2)/27] * 27
         })
         
-        # 6. CatBoost - handles categorical features well
+        # 6. CatBoost - handles categorical features well (though we don't have any in this dataset)
         initial_ensemble_config.append({
             "estimator": "catboost",
             "model_type": "catboost",
             "input_dim": input_dim,
             "output_dim": output_dim,
             "iterations": 100,
-            "depth": 6,
-            "learning_rate": 0.1,
+            "depth": 5,
+            "learning_rate": 0.03,
             "loss_function": "Logloss",
             "verbose": False,
-            "class_weights": [1, 10],  # Give more weight to minority class
+            "class_weights": [1, 580],  # Adjust for extreme imbalance
             "random_state": 42,
-            "feature_importances": [1.0/input_dim] * input_dim
+            "feature_importances": [0.05, 0.05, 0.05, 0.05] + [(1.0-0.2)/27] * 27
         })
         
-        # 7. KNN - simple but effective for detecting local patterns in fraud
+        # 7. Isolation Forest - special addition specifically for fraud detection
+        # Note: Your client code will need to be updated to handle this model type
         initial_ensemble_config.append({
-            "estimator": "knn",
-            "model_type": "knn",
+            "estimator": "isolation_forest",
+            "model_type": "isolation_forest",
             "input_dim": input_dim,
             "output_dim": output_dim,
-            "n_neighbors": 5,
-            "weights": "distance",  # Weight by inverse distance
-            "algorithm": "auto",
-            "leaf_size": 30,
-            "p": 2,  # Euclidean distance
-            "metric": "minkowski",
-            "metric_params": None,
-            "n_jobs": -1
+            "n_estimators": 100,
+            "max_samples": "auto",
+            "contamination": 0.002,  # Slightly higher than known fraud rate
+            "max_features": 1.0,
+            "bootstrap": False,
+            "n_jobs": -1,
+            "random_state": 42,
+            "behaviour": "new",
+            "feature_importances": [1.0/input_dim] * input_dim
         })
         
         # 8. Meta-learner model - stacking layer using logistic regression
@@ -319,22 +324,22 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
             "model_type": "meta_lr",
             "input_dim": 7,  # Number of base models
             "output_dim": output_dim,
-            "penalty": "l2",
-            "C": 1.0,
-            "solver": "liblinear",
-            "max_iter": 1000,
+            "penalty": "l1",  # L1 regularization for sparse weights
+            "C": 0.5,  # Moderate regularization
+            "solver": "saga",  # Better for L1 penalty
+            "max_iter": 2000,
             "random_state": 42,
-            # Initialize with balanced weights
-            "coef": [[0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.10]],
-            "intercept": [-0.1]  # Slight negative bias (fraud is rare)
+            # Initialize with weights that favor ensemble diversity
+            "coef": [[0.10, 0.15, 0.15, 0.20, 0.15, 0.15, 0.10]],
+            "intercept": [-2.0]  # Strong negative bias for extreme imbalance
         })
         
         # Define model names in the same order as the configs
-        model_names = ["lr", "svc", "rf", "xgb", "lgbm", "catboost", "knn", "meta_lr"]
+        model_names = ["lr", "svc", "rf", "xgb", "lgbm", "catboost", "isolation_forest", "meta_lr"]
         
         # Set initial ensemble weights - give higher weights to gradient boosting methods
-        # which typically perform well for fraud detection
-        weights = [0.05, 0.15, 0.10, 0.20, 0.20, 0.15, 0.05, 0.10]
+        # and anomaly detection models which typically perform well for extreme imbalance
+        weights = [0.05, 0.10, 0.10, 0.25, 0.20, 0.15, 0.10, 0.05]
         
         # Create ensemble state with initial configuration
         ensemble_state = {
@@ -347,7 +352,7 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
         ensemble_bytes = json.dumps(ensemble_state).encode('utf-8')
         parameters = ndarrays_to_parameters([np.frombuffer(ensemble_bytes, dtype=np.uint8)])
         
-        logger.info(f"Initialized server with fraud detection ensemble: input_dim={input_dim}, meta_input_dim={len(model_names)-1}")
+        logger.info(f"Initialized server with Credit Card Fraud detection ensemble: input_dim={input_dim}, meta_input_dim={len(model_names)-1}")
         logger.info(f"Base models: {', '.join(model_names[:-1])}")
         
         return parameters
@@ -443,7 +448,6 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
         # Return client/config pairs
         return [(client, fit_ins) for client in clients]
     
-
     def _store_raw_parameters_in_ipfs(self, params_ndarrays: List[np.ndarray], server_round: int) -> str:
         """Store raw parameters in IPFS."""
         # Create state dict from weights
@@ -741,7 +745,7 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
         results: List[Tuple[ClientProxy, EvaluateRes]],
         failures: List[Union[Tuple[ClientProxy, EvaluateRes], BaseException]],
     ) -> Tuple[Optional[float], Dict[str, Scalar]]:
-        """Aggregate evaluation results from clients."""
+        """Aggregate evaluation results from clients with fraud-specific metrics collection."""
 
         # Filter out unauthorized clients
         authorized_results = []
@@ -769,6 +773,47 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
             else:
                 logger.error("No clients returned evaluation results.")
             return None, {"error": "no_authorized_clients"}
+
+        # Initialize client metrics dictionary if not existing
+        if not hasattr(self, 'client_metrics'):
+            self.client_metrics = {}
+        
+        # Collect client-specific metrics for comparison and visualization
+        for client, eval_res in authorized_results:
+            wallet_address = eval_res.metrics.get("wallet_address", "unknown")
+            client_id = wallet_address if wallet_address != "unknown" else client.cid
+            
+            # Initialize client entry if needed
+            if client_id not in self.client_metrics:
+                self.client_metrics[client_id] = []
+            
+            # Extract basic metrics
+            client_round_metrics = {
+                "round": server_round,
+                "loss": float(eval_res.loss),
+                "accuracy": float(eval_res.metrics.get("accuracy", 0)),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            
+            # Add fraud-specific metrics if available
+            for metric in ["precision", "recall", "f1_score", "auc_roc", "specificity"]:
+                if metric in eval_res.metrics:
+                    client_round_metrics[metric] = float(eval_res.metrics[metric])
+            
+            # Add confusion matrix components if available
+            for metric in ["true_positives", "false_positives", "true_negatives", "false_negatives"]:
+                if metric in eval_res.metrics:
+                    client_round_metrics[metric] = int(eval_res.metrics[metric])
+            
+            # Add GA-Stacking metrics if available
+            for metric in ["ensemble_accuracy", "diversity_score", "generalization_score", 
+                        "convergence_rate", "avg_base_model_score", "final_score"]:
+                if metric in eval_res.metrics:
+                    client_round_metrics[metric] = float(eval_res.metrics[metric])
+            
+            # Store metrics for this client
+            self.client_metrics[client_id].append(client_round_metrics)
+            logger.debug(f"Collected round {server_round} metrics for client {client_id}")
 
         # Check if any client has returned ensemble metrics
         has_ensemble_metrics = False
@@ -801,6 +846,56 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
         metrics["authorized_clients"] = len(authorized_results)
         metrics["unauthorized_clients"] = len(unauthorized_clients)
 
+        # Aggregate and add fraud detection metrics
+        fraud_metrics = ["precision", "recall", "f1_score", "auc_roc", "specificity"]
+        for metric in fraud_metrics:
+            values = [float(res.metrics.get(metric, 0.0)) for _, res in authorized_results if metric in res.metrics]
+            if values:
+                # Calculate weighted average for each metric
+                metrics[f"avg_{metric}"] = sum(v * w for v, w in zip(values, weights[:len(values)]))
+        
+        # Aggregate confusion matrix totals across clients
+        cm_totals = {
+            "true_positives": 0,
+            "false_positives": 0,
+            "true_negatives": 0,
+            "false_negatives": 0
+        }
+        
+        for _, eval_res in authorized_results:
+            for metric in cm_totals.keys():
+                if metric in eval_res.metrics:
+                    cm_totals[metric] += int(eval_res.metrics[metric])
+        
+        # Add totals to metrics
+        for metric, value in cm_totals.items():
+            metrics[metric] = value
+        
+        # Calculate global precision, recall, and F1 from aggregated confusion matrix
+        tp = cm_totals["true_positives"]
+        fp = cm_totals["false_positives"]
+        fn = cm_totals["false_negatives"]
+        tn = cm_totals["true_negatives"]
+        
+        # Calculate global metrics (handle division by zero)
+        if tp + fp > 0:
+            metrics["global_precision"] = tp / (tp + fp)
+        else:
+            metrics["global_precision"] = 0.0
+            
+        if tp + fn > 0:
+            metrics["global_recall"] = tp / (tp + fn)
+        else:
+            metrics["global_recall"] = 0.0
+        
+        # Calculate global F1
+        if metrics["global_precision"] + metrics["global_recall"] > 0:
+            p = metrics["global_precision"]
+            r = metrics["global_recall"]
+            metrics["global_f1"] = 2 * p * r / (p + r)
+        else:
+            metrics["global_f1"] = 0.0
+
         # Calculate average of GA-Stacking specific metrics across clients
         ga_metrics_keys = [
             "ensemble_accuracy", 
@@ -831,7 +926,7 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
             # Add additional aggregate metrics
             metrics["ga_clients_reporting"] = ga_metrics_count
         
-        # Calculate average accuracy
+        # Calculate average accuracy (keeping your existing code)
         accuracies = [res.metrics.get("accuracy", 0.0) for _, res in authorized_results]
         if accuracies:
             avg_accuracy = sum(accuracies) / len(accuracies)
@@ -850,30 +945,44 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
             # Save evaluation metrics
             self.metrics_history.append(eval_metrics)
 
-            # Log the evaluation results
-            logger.info(f"Round {server_round} evaluation: Loss={loss_aggregated:.4f}, Metrics={metrics}")
+            # Log the evaluation results with enhanced fraud metrics
+            logger.info(f"Round {server_round} evaluation: Loss={loss_aggregated:.4f}, Accuracy={metrics.get('avg_accuracy', 0):.4f}")
             
-            # If we have GA-Stacking metrics, log some additional insights
+            # Log fraud-specific metrics if available
+            if 'global_precision' in metrics:
+                logger.info(f"Fraud detection metrics: "
+                        f"Precision={metrics['global_precision']:.4f}, "
+                        f"Recall={metrics['global_recall']:.4f}, "
+                        f"F1={metrics['global_f1']:.4f}")
+            
+            # Log TP/FP/TN/FN if available
+            if all(k in metrics for k in ["true_positives", "false_positives", "true_negatives", "false_negatives"]):
+                logger.info(f"Confusion matrix: TP={metrics['true_positives']}, "
+                        f"FP={metrics['false_positives']}, "
+                        f"TN={metrics['true_negatives']}, "
+                        f"FN={metrics['false_negatives']}")
+            
+            # If we have GA-Stacking metrics, log some additional insights (keeping your existing code)
             if ga_metrics_count > 0:
                 logger.info(f"GA-Stacking metrics: "
-                           f"Ensemble Acc={metrics.get('avg_ensemble_accuracy', 0):.4f}, "
-                           f"Diversity={metrics.get('avg_diversity_score', 0):.4f}, "
-                           f"Avg Score={metrics.get('avg_final_score', 0):.1f}")
+                        f"Ensemble Acc={metrics.get('avg_ensemble_accuracy', 0):.4f}, "
+                        f"Diversity={metrics.get('avg_diversity_score', 0):.4f}, "
+                        f"Avg Score={metrics.get('avg_final_score', 0):.1f}")
                 
-                # If we have a reward system, log the reward distribution
+                # If we have a reward system, log the reward distribution (keeping your existing code)
                 if hasattr(self, "reward_system"):
                     try:
                         reward_info = self.reward_system.get_reward_pool_info(server_round)
                         if reward_info["allocated_eth"] > 0:
                             logger.info(f"Rewards: {reward_info['allocated_eth']:.4f} ETH allocated "
-                                       f"({reward_info['allocated_eth'] / max(1, len(authorized_results)):.4f} ETH/client avg)")
+                                    f"({reward_info['allocated_eth'] / max(1, len(authorized_results)):.4f} ETH/client avg)")
                     except Exception as e:
                         logger.error(f"Error getting reward information: {e}")
 
         return loss_aggregated, metrics
-    
+
     def save_metrics_history(self, filepath: str = "metrics/metrics_history.json"):
-        """Save metrics history to a file."""
+        """Save metrics history to a file with fraud-specific metrics visualizations."""
         # Save combined metrics history
         with open(filepath, "w") as f:
             json.dump(self.metrics_history, f, indent=2)
@@ -881,12 +990,79 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
         
         # Save individual round metrics to separate files
         metrics_dir = Path(filepath).parent
+        metrics_dir.mkdir(parents=True, exist_ok=True)
+        
         for round_metrics in self.metrics_history:
             round_num = round_metrics.get("round", 0)
             round_file = metrics_dir / f"round_{round_num}_metrics.json"
             with open(round_file, "w") as f:
                 json.dump(round_metrics, f, indent=2)
             logger.info(f"Saved round {round_num} metrics to {round_file}")
+        
+        # Generate fraud metrics visualizations
+        try:
+            # Import visualization module
+            from metrics_visualization import (
+                generate_fraud_metrics_dashboard, 
+                plot_metrics_history,
+                generate_client_metrics_comparison
+            )
+            
+            # Create visualizations directory
+            vis_dir = metrics_dir / "visualizations"
+            vis_dir.mkdir(exist_ok=True)
+            
+            # Generate main dashboard
+            dashboard_path = vis_dir / "fraud_metrics_dashboard.png"
+            generate_fraud_metrics_dashboard(self.metrics_history, save_path=str(dashboard_path))
+            
+            # Generate individual metric plots
+            metrics_to_plot = [
+                "accuracy", "precision", "recall", "f1_score", "auc_roc",
+                "true_positives", "false_positives", "false_negatives"
+            ]
+            
+            for metric in metrics_to_plot:
+                try:
+                    metric_path = vis_dir / f"{metric}_history.png"
+                    fig = plot_metrics_history(self.metrics_history, [metric])
+                    fig.savefig(metric_path, dpi=300, bbox_inches='tight')
+                    plt.close(fig)
+                except Exception as e:
+                    logger.error(f"Error creating {metric} plot: {e}")
+            
+            # Combined plots for related metrics
+            try:
+                # Precision, Recall, F1
+                prec_rec_path = vis_dir / "precision_recall_f1.png"
+                fig = plot_metrics_history(self.metrics_history, ["precision", "recall", "f1_score"])
+                fig.savefig(prec_rec_path, dpi=300, bbox_inches='tight')
+                plt.close(fig)
+                
+                # Confusion matrix components
+                cm_path = vis_dir / "confusion_matrix_components.png"
+                fig = plot_metrics_history(self.metrics_history, ["true_positives", "false_positives", "false_negatives"])
+                fig.savefig(cm_path, dpi=300, bbox_inches='tight')
+                plt.close(fig)
+            except Exception as e:
+                logger.error(f"Error creating combined plots: {e}")
+            
+            # If client data is available, create client comparison plots
+            if hasattr(self, 'client_metrics') and self.client_metrics:
+                for metric in ["accuracy", "precision", "recall", "f1_score"]:
+                    try:
+                        comparison_path = vis_dir / f"client_{metric}_comparison.png"
+                        fig = generate_client_metrics_comparison(self.client_metrics, metric, save_path=str(comparison_path))
+                        plt.close(fig)
+                    except Exception as e:
+                        logger.error(f"Error creating client comparison for {metric}: {e}")
+            
+            logger.info(f"Generated fraud metrics visualizations in {vis_dir}")
+            
+        except ImportError as e:
+            logger.error(f"Could not import visualization module: {e}")
+        except Exception as e:
+            logger.error(f"Error generating fraud metrics visualizations: {e}")
     
     def save_client_stats(self, filepath: str = "metrics/client_stats.json"):
         """Save client contribution statistics to a file."""
@@ -939,49 +1115,66 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
             return
         
         try:
-            # Get model history from blockchain
-            models = self.blockchain.get_all_models(self.version_prefix)
-            
             metrics_dir = Path(filepath).parent
+            all_models = []
+            
+            # Instead of trying to get all models or using version filtering,
+            # specifically request models for the rounds we know exist
+            # This is more reliable than trying to filter by version
+            max_round = len(self.metrics_history)
+            logger.info(f"Retrieving models for {max_round} completed rounds")
+            
+            for round_num in range(1, max_round + 1):
+                try:
+                    # Try to get the model for this round
+                    models = self.blockchain.get_models_by_round(round_num)
+                    if models and len(models) > 0:
+                        # Get the latest model for this round
+                        model_details = self.blockchain.get_latest_model_by_round(round_num)
+                        if model_details:
+                            all_models.append(model_details)
+                            logger.info(f"Found model for round {round_num}")
+                            
+                            # Try to get the model data from IPFS
+                            try:
+                                ipfs_hash = model_details.get("ipfs_hash")
+                                if ipfs_hash:
+                                    model_data = self.ipfs.get_json(ipfs_hash)
+                                    if model_data:
+                                        # Save the complete model data including weights
+                                        model_file = metrics_dir / f"model_round_{round_num}.json"
+                                        with open(model_file, "w") as f:
+                                            json.dump(model_data, f, indent=2)
+                                        logger.info(f"Saved round {round_num} model data to {model_file}")
+                                        
+                                        # Save a lightweight model info file (without weights)
+                                        info_file = metrics_dir / f"model_round_{round_num}_info.json"
+                                        model_info = {**model_details}
+                                        if model_data and "info" in model_data:
+                                            model_info["model_info"] = model_data["info"]
+                                        with open(info_file, "w") as f:
+                                            json.dump(model_info, f, indent=2)
+                            except Exception as e:
+                                logger.error(f"Failed to get model data for round {round_num}: {e}")
+                                # Save just the model metadata if we couldn't get the full data
+                                model_file = metrics_dir / f"model_round_{round_num}_metadata.json"
+                                with open(model_file, "w") as f:
+                                    json.dump(model_details, f, indent=2)
+                except Exception as e:
+                    logger.error(f"Error getting model for round {round_num}: {str(e)}")
             
             # Save combined model history
             with open(filepath, "w") as f:
-                json.dump(models, f, indent=2)
+                json.dump(all_models, f, indent=2)
             
-            logger.info(f"Saved model history to {filepath}")
-            
-            # Save individual model data to separate files
-            for model in models:
-                round_num = model.get("round", 0)
-                model_file = metrics_dir / f"model_round_{round_num}.json"
-                
-                # Try to get the model data from IPFS
-                try:
-                    ipfs_hash = model.get("ipfs_hash")
-                    if ipfs_hash:
-                        model_data = self.ipfs.get_json(ipfs_hash)
-                        if model_data:
-                            # Save the complete model data including weights
-                            with open(model_file, "w") as f:
-                                json.dump(model_data, f, indent=2)
-                            logger.info(f"Saved round {round_num} model data to {model_file}")
-                            
-                            # Save a lightweight model info file (without weights)
-                            info_file = metrics_dir / f"model_round_{round_num}_info.json"
-                            model_info = {**model}
-                            if model_data and "info" in model_data:
-                                model_info["model_info"] = model_data["info"]
-                            with open(info_file, "w") as f:
-                                json.dump(model_info, f, indent=2)
-                except Exception as e:
-                    logger.error(f"Failed to get model data for round {round_num}: {e}")
-                    # Save just the model metadata if we couldn't get the full data
-                    model_file = metrics_dir / f"model_round_{round_num}_metadata.json"
-                    with open(model_file, "w") as f:
-                        json.dump(model, f, indent=2)
-                    
+            logger.info(f"Saved model history with {len(all_models)} models to {filepath}")
+            latest_model = self.blockchain.get_latest_version_model("1.0")
+            logger.info(f"Updated Latest model: {latest_model}")
         except Exception as e:
             logger.error(f"Failed to save model history: {e}")
+            # Add fallback to save an empty array if all else fails
+            with open(filepath, "w") as f:
+                json.dump([], f, indent=2)
 
     # Model versioning strategy
     def get_version_strategy(self, server_round: int) -> dict:
@@ -1158,6 +1351,8 @@ def start_server(
     # Start server
     server = fl.server.Server(client_manager=fl.server.SimpleClientManager(), strategy=strategy)
     
+    # monitor = start_monitoring_server(port=8050)
+
     # Run server
     fl.server.start_server(
         server_address=server_address,
@@ -1191,6 +1386,7 @@ def start_server(
     
     logger.info(f"Server completed {num_rounds} rounds of federated learning with GA-Stacking")
     logger.info(f"All metrics saved to {metrics_dir}")
+    
 
 if __name__ == "__main__":
     import argparse

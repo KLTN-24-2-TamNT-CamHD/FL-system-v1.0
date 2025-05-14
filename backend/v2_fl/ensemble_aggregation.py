@@ -130,6 +130,16 @@ class EnsembleAggregator:
                 model_weight = ensemble["weights"][idx] * ensemble_weight
                 model_weights_by_name[name].append(model_weight)
         
+        for ensemble in ensembles:
+            # Create a consistent order mapping
+            model_order = {name: i for i, name in enumerate(ensemble["model_names"])}
+            
+            # Sort everything by model name to ensure consistent ordering
+            sorted_indices = sorted(range(len(ensemble["model_names"])), key=lambda i: ensemble["model_names"][i])
+            ensemble["model_names"] = [ensemble["model_names"][i] for i in sorted_indices]
+            ensemble["weights"] = [ensemble["weights"][i] for i in sorted_indices]
+            ensemble["model_state_dicts"] = [ensemble["model_state_dicts"][i] for i in sorted_indices]
+        
         # Aggregate model state dicts
         aggregated_models = []
         aggregated_names = []
@@ -297,6 +307,61 @@ class EnsembleAggregator:
                 # Use the parameter from the client with the highest weight
                 max_weight_idx = normalized_weights.index(max(normalized_weights))
                 aggregated[key] = valid_dicts[max_weight_idx]
+        
+            if key == 'coef':
+                logger.info(f"Aggregating coefficients with shapes: {[np.array(d).shape if isinstance(d, list) else 'scalar' for d in valid_dicts]}")
+                
+                try:
+                    # Convert all coef to numpy arrays with explicit shape checking
+                    coef_arrays = []
+                    coef_shapes = []
+                    
+                    for i, coef in enumerate(valid_dicts):
+                        if isinstance(coef, list):
+                            # Handle nested structure
+                            coef_array = np.array(coef, dtype=np.float64)
+                            coef_arrays.append(coef_array)
+                            coef_shapes.append(coef_array.shape)
+                            logger.debug(f"Client {i} coef shape: {coef_array.shape}, has non-zeros: {np.any(coef_array != 0)}")
+                        else:
+                            logger.warning(f"Client {i} has unexpected coef type: {type(coef)}")
+                    
+                    # Check shapes match
+                    if len(set(str(s) for s in coef_shapes)) != 1:
+                        logger.warning(f"Coefficient shape mismatch: {coef_shapes}, using weighted averaging per element")
+                        
+                        # Find max shape to accommodate all
+                        max_dims = tuple(max(s[i] if i < len(s) else 0 for s in coef_shapes) for i in range(max(len(s) for s in coef_shapes)))
+                        
+                        # Reshape all arrays to max shape, padding with zeros
+                        padded_arrays = []
+                        for arr, w in zip(coef_arrays, normalized_weights):
+                            padded = np.zeros(max_dims, dtype=np.float64)
+                            slices = tuple(slice(0, min(dim, arr.shape[i])) for i, dim in enumerate(arr.shape))
+                            padded[slices] = arr
+                            padded_arrays.append(padded * w)
+                        
+                        # Sum all padded arrays
+                        aggregated[key] = sum(padded_arrays).tolist()
+                    else:
+                        # Shapes match, do normal weighted average
+                        aggregated[key] = (sum(arr * w for arr, w in zip(coef_arrays, normalized_weights))).tolist()
+                        
+                    # Check if result contains any non-zero values
+                    if not np.any(np.array(aggregated[key]) != 0):
+                        logger.warning(f"Aggregated coefficients are all zeros! Check client models.")
+                        
+                        # Fallback: use coefficients from client with highest weight
+                        max_weight_idx = normalized_weights.index(max(normalized_weights))
+                        aggregated[key] = valid_dicts[max_weight_idx]
+                        logger.info(f"Falling back to coefficients from client with weight {normalized_weights[max_weight_idx]}")
+                    
+                except Exception as e:
+                    logger.error(f"Error aggregating coefficients: {e}")
+                    # Use coefficients from highest-weighted client
+                    max_weight_idx = normalized_weights.index(max(normalized_weights))
+                    aggregated[key] = valid_dicts[max_weight_idx]
+                    logger.info(f"Exception - falling back to coefficients from client with weight {normalized_weights[max_weight_idx]}")
         
         return aggregated
     

@@ -1,0 +1,34 @@
+Credit Card Fraud Detection Dataset - amount_based Split
+Total samples: 284807
+Original fraud cases: 492 (0.1727%)
+
+Balance method: Varying SMOTE (different for each client)
+
+Client Summaries:
+
+client-1:
+  - Amount range: $0.00 to $9.99
+  - Train fraud ratio: 4.7613%
+  - Test fraud ratio: 0.2667%
+  - Train samples: 15710
+  - Test samples: 3000
+  - Train fraud cases: 748
+  - Test fraud cases: 8
+
+client-2:
+  - Amount range: $10.00 to $50.00
+  - Train fraud ratio: 9.0904%
+  - Test fraud ratio: 0.0667%
+  - Train samples: 16490
+  - Test samples: 3000
+  - Train fraud cases: 1499
+  - Test fraud cases: 2
+
+client-3:
+  - Amount range: $50.01 to $25691.16
+  - Train fraud ratio: 19.9979%
+  - Test fraud ratio: 0.2000%
+  - Train samples: 18712
+  - Test samples: 3000
+  - Train fraud cases: 3742
+  - Test fraud cases: 6

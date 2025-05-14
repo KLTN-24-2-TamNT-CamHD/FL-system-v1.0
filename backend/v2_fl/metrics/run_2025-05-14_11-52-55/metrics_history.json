@@ -1,0 +1,149 @@
+[
+  {
+    "round": 1,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,knn,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.13068944482233139,
+        0.018789110585977348,
+        0.0053389969501711895,
+        0.022120881840409057,
+        0.5932835528403146,
+        0.19648370815951696,
+        0.007795451040615747,
+        0.02549885376066363
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 90.20588235294117,
+      "ga_stacking_score_range": 18,
+      "ga_stacking_reward_participants": 34
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T04:53:52.296341+00:00"
+  },
+  {
+    "round": 1,
+    "eval_loss": 0.004151419969275594,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 99.6,
+      "loss": 0.004151419850834646,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 99.6
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T04:53:53.749011+00:00"
+  },
+  {
+    "round": 2,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,knn,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.29016576177487113,
+        0.1159274197100173,
+        0.09686475671992784,
+        0.011645717434300354,
+        0.18379453552395547,
+        0.2508612326018733,
+        0.047971388964714694,
+        0.002769187270339929
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 90.33333333333333,
+      "ga_stacking_score_range": 18,
+      "ga_stacking_reward_participants": 33
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T04:54:43.130962+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": 0.008869559969753027,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 99.6,
+      "loss": 0.008869560134783388,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 99.6
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T04:54:44.553444+00:00"
+  },
+  {
+    "round": 3,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,knn,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.006208463500906935,
+        0.023553285252665583,
+        0.19389573796099113,
+        0.2422089045352793,
+        0.18906915296926152,
+        0.21833476222625722,
+        0.08725407772679337,
+        0.039475615827844916
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 90.1875,
+      "ga_stacking_score_range": 18,
+      "ga_stacking_reward_participants": 32
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T04:55:35.004308+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 0.012768422719091177,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 99.585,
+      "loss": 0.012768422802817076,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 99.585
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T04:55:36.376483+00:00"
+  }
+]

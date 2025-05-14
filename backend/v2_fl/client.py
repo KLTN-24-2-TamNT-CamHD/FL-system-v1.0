@@ -40,6 +40,12 @@ from flwr.common import (
     ndarrays_to_parameters,
     parameters_to_ndarrays,
 )
+
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score, 
+    roc_auc_score, confusion_matrix
+)
+
 import numpy as np
 
 from ipfs_connector import IPFSConnector
@@ -296,7 +302,7 @@ class GAStackingClient(fl.client.NumPyClient):
                 model_names=model_names[:len(self.base_models)],
                 device=self.device
             )
-            
+            self.check_and_fix_zero_coefficients()
             logger.info(f"Ensemble model updated with {len(self.base_models)} models")
             
         except Exception as e:
@@ -546,6 +552,9 @@ class GAStackingClient(fl.client.NumPyClient):
                 base_models.append(model)
                 base_model_names.append(name)
         
+        # Check and fix zero coefficients before training
+        self.check_and_fix_zero_coefficients()
+
         # 1. First train all base models
         for i, (model, name) in enumerate(zip(base_models, base_model_names)):
             try:
@@ -742,6 +751,30 @@ class GAStackingClient(fl.client.NumPyClient):
             avg_epoch_loss = epoch_loss / epoch_samples
             if epoch % 2 == 0:  # Log every 2 epochs
                 logger.debug(f"Epoch {epoch+1}/{epochs}, Loss: {avg_epoch_loss:.4f}")
+            
+        # coef checking        
+        if isinstance(model, SklearnModelWrapper):
+            # Chesck if sklearn wrapper model has zero coefficients after training
+            if hasattr(model.model, 'coef_') and np.all(np.array(model.model.coef_) == 0):
+                logger.warning(f"Model {model.model_type} still has zero coefficients after training. Initializing with random values.")
+                model.model.coef_ = np.random.normal(0, 0.01, model.model.coef_.shape)
+                if hasattr(model.model, 'intercept_'):
+                    model.model.intercept_ = np.random.normal(0, 0.01, model.model.intercept_.shape)
+        
+        elif hasattr(model, 'coef') and np.all(np.array(model.coef) == 0):
+            # Direct access to coefficients
+            logger.warning(f"Model has zero coefficients after training. Initializing with random values.")
+            model.coef = np.random.normal(0, 0.01, model.coef.shape)
+            if hasattr(model, 'intercept'):
+                model.intercept = np.random.normal(0, 0.01, model.intercept.shape)
+        
+        # For PyTorch models
+        elif hasattr(model, 'linear') and hasattr(model.linear, 'weight'):
+            weight = model.linear.weight.data.cpu().numpy()
+            if np.all(weight == 0):
+                logger.warning(f"PyTorch model has zero weights after training. Initializing with xavier uniform.")
+                nn.init.xavier_uniform_(model.linear.weight)
+                nn.init.zeros_(model.linear.bias)
     
     def _initialize_models_from_server_config(self, configs):
         """Initialize models from server configuration with proper type handling."""
@@ -901,6 +934,9 @@ class GAStackingClient(fl.client.NumPyClient):
         # Verify and fix models before training
         self._verify_and_fix_models()
 
+        # Add this line to check and fix zero coefficients
+        self.check_and_fix_zero_coefficients()
+        
         # Create validation set for GA-Stacking optimization
         train_data, val_data = self._create_validation_split(validation_split)
         
@@ -964,7 +1000,7 @@ class GAStackingClient(fl.client.NumPyClient):
 
         # Evaluate the ensemble
         try:
-            accuracy, loss = self._evaluate_ensemble(self.test_loader)
+            accuracy, loss, metrics = self._evaluate_ensemble(self.test_loader)
         except Exception as e:
             logger.error(f"Error evaluating ensemble: {str(e)}")
             accuracy, loss = 0.0, float('inf')
@@ -973,6 +1009,11 @@ class GAStackingClient(fl.client.NumPyClient):
         metrics = {
             "loss": float(loss),
             "accuracy": float(accuracy),
+            # Add fraud-specific metrics
+            "precision": float(metrics['precision']),
+            "recall": float(metrics['recall']),
+            "f1_score": float(metrics['f1_score']),
+            "auc_roc": float(metrics.get('auc_roc', 0.5)),
             # Add GA-Stacking specific metrics
             "ensemble_accuracy": float(ga_stacking_metrics.get("ensemble_accuracy", accuracy)),
             "diversity_score": float(ga_stacking_metrics.get("diversity_score", 0.0)),
@@ -1555,6 +1596,37 @@ class GAStackingClient(fl.client.NumPyClient):
                     except Exception as e:
                         logger.error(f"Error fixing {name} input dimension: {e}")
     
+    def check_and_fix_zero_coefficients(self):
+        """Check models for zero coefficients and initialize them if needed."""
+        for i, (model, name) in enumerate(zip(self.base_models, self.model_names)):
+            if hasattr(model, 'model') and hasattr(model.model, 'coef_'):
+                # For sklearn wrappers
+                if hasattr(model.model, 'coef_') and np.all(np.array(model.model.coef_) == 0):
+                    logger.warning(f"Model {name} has all-zero coefficients before training, initializing")
+                    model.model.coef_ = np.random.normal(0, 0.01, model.model.coef_.shape)
+                    if hasattr(model.model, 'intercept_'):
+                        model.model.intercept_ = np.random.normal(0, 0.01, model.model.intercept_.shape)
+                    model.is_initialized = False  # Force retraining
+            elif hasattr(model, 'coef'):
+                # Direct access to coefficients
+                if hasattr(model, 'coef') and np.all(np.array(model.coef) == 0):
+                    logger.warning(f"Model {name} has all-zero coefficients before training, initializing")
+                    model.coef = np.random.normal(0, 0.01, model.coef.shape)
+                    if hasattr(model, 'intercept'):
+                        model.intercept = np.random.normal(0, 0.01, model.intercept.shape)
+                    if hasattr(model, 'is_initialized'):
+                        model.is_initialized = False  # Force retraining
+            # PyTorch models
+            elif hasattr(model, 'linear') and hasattr(model.linear, 'weight'):
+                weight = model.linear.weight.data.cpu().numpy()
+                if np.all(weight == 0):
+                    logger.warning(f"PyTorch model {name} has all-zero weights, initializing")
+                    # Initialize with small random values
+                    nn.init.xavier_uniform_(model.linear.weight)
+                    nn.init.zeros_(model.linear.bias)
+                    if hasattr(model, 'is_initialized'):
+                        model.is_initialized = False  # Force retraining
+    
     def evaluate(
         self, parameters: Parameters, config: Dict[str, Scalar]
     ) -> Tuple[float, int, Dict[str, Scalar]]:
@@ -1588,13 +1660,24 @@ class GAStackingClient(fl.client.NumPyClient):
         self._verify_and_fix_models()
         
         # Evaluate the ensemble
-        accuracy, loss = self._evaluate_ensemble(self.test_loader)
+        accuracy, loss, metrics = self._evaluate_ensemble(self.test_loader)
         
         # Add to metrics history
         self.metrics_history.append({
             "round": round_num,
             "eval_loss": float(loss),
             "accuracy": float(accuracy),
+            # Add fraud-specific metrics
+            "precision": float(metrics['precision']),
+            "recall": float(metrics['recall']),
+            "f1_score": float(metrics['f1_score']),
+            "specificity": float(metrics.get('specificity', 0.0)),
+            "auc_roc": float(metrics.get('auc_roc', 0.5)),
+            # Include confusion matrix elements
+            "true_positives": int(metrics.get('true_positives', 0)),
+            "false_positives": int(metrics.get('false_positives', 0)),
+            "true_negatives": int(metrics.get('true_negatives', 0)),
+            "false_negatives": int(metrics.get('false_negatives', 0)),
             "eval_samples": len(self.test_loader.dataset),
             "ipfs_hash": ipfs_hash,
             "wallet_address": self.wallet_address if self.wallet_address else "unknown",
@@ -1610,15 +1693,15 @@ class GAStackingClient(fl.client.NumPyClient):
         
         return float(loss), len(self.test_loader.dataset), metrics
     
-    def _evaluate_ensemble(self, data_loader: DataLoader) -> Tuple[float, float]:
+    def _evaluate_ensemble(self, data_loader: DataLoader) -> Tuple[float, float, Dict]:
         """
-        Evaluate the ensemble model with proper meta-learner handling.
+        Evaluate the ensemble model with proper fraud detection metrics.
         
         Args:
             data_loader: Data loader to evaluate on
             
         Returns:
-            Tuple of (accuracy, loss)
+            Tuple of (accuracy, loss, metrics_dict)
         """
         if self.ensemble_model is None:
             logger.warning("No ensemble model for evaluation, using equal weights")
@@ -1632,8 +1715,14 @@ class GAStackingClient(fl.client.NumPyClient):
             )
         
         self.ensemble_model.eval()
+        
+        # Initialize lists to collect predictions and ground truth
+        all_targets = []
+        all_outputs = []  # Raw outputs (probabilities)
+        all_preds = []    # Binary predictions
+        threshold = 0.5
+        
         test_loss = 0.0
-        correct = 0
         total = 0
         criterion = nn.MSELoss()
         
@@ -1641,24 +1730,143 @@ class GAStackingClient(fl.client.NumPyClient):
             for data, target in data_loader:
                 data, target = data.to(self.device), target.to(self.device)
                 
-                # Use the ensemble_model forward method which we fixed
+                # Use the ensemble_model forward method
                 output = self.ensemble_model(data)
-                loss = criterion(output, target)
                 
+                # Ensure output and target have matching shapes for loss calculation
+                if output.shape != target.shape:
+                    if len(output.shape) == 1:
+                        output = output.unsqueeze(1)
+                    if len(target.shape) == 1:
+                        target = target.unsqueeze(1)
+                        
+                loss = criterion(output, target)
                 test_loss += loss.item() * len(data)
                 
-                # For regression, we consider a prediction correct if it's within a threshold
-                threshold = 0.5
-                correct += torch.sum((torch.abs(output - target) < threshold)).item()
+                # Store targets, raw outputs, and binary predictions
+                all_targets.append(target.cpu())
+                all_outputs.append(output.cpu())
+                
+                # Binary predictions using threshold
+                preds = (output >= threshold).float()
+                all_preds.append(preds.cpu())
+                
                 total += target.size(0)
         
-        # Calculate average loss and accuracy
+        # Calculate average loss
         avg_loss = test_loss / total if total > 0 else float('inf')
-        accuracy = 100.0 * correct / total if total > 0 else 0.0
         
-        logger.info(f"Ensemble evaluation - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.2f}%")
+        # Concatenate all batches
+        y_true = torch.cat(all_targets).detach().numpy()
+        y_pred = torch.cat(all_preds).detach().numpy()
+        y_score = torch.cat(all_outputs).detach().numpy()
         
-        return accuracy, avg_loss
+        # Ensure correct shapes for sklearn metrics
+        if len(y_true.shape) > 1 and y_true.shape[1] == 1:
+            y_true = y_true.flatten()
+        if len(y_pred.shape) > 1 and y_pred.shape[1] == 1:
+            y_pred = y_pred.flatten()
+        if len(y_score.shape) > 1 and y_score.shape[1] == 1:
+            y_score = y_score.flatten()
+        
+        # Calculate fraud-specific metrics
+        try:
+            # Calculate confusion matrix
+            cm = confusion_matrix(y_true, y_pred)
+            
+            # Handle empty or 1x1 confusion matrix (edge case with only one class present)
+            if cm.size == 1:
+                # Only one class present in the batch
+                if cm[0, 0] == 0:  # No true predictions
+                    tn, fp, fn, tp = 0, 0, 0, 0
+                else:  # All predictions are true negatives
+                    if y_true[0] == 0:  # If the single class is negative
+                        tn, fp, fn, tp = cm[0, 0], 0, 0, 0
+                    else:  # If the single class is positive
+                        tn, fp, fn, tp = 0, 0, 0, cm[0, 0]
+            else:
+                # Standard case with 2x2 confusion matrix
+                tn, fp, fn, tp = cm.ravel()
+            
+            # Calculate accuracy
+            accuracy = 100.0 * (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0.0
+            
+            # Calculate precision, recall, F1 - handling possible division by zero
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+            
+            # Calculate AUC-ROC if possible (needs positive and negative samples)
+            auc_roc = 0.5  # Default value (random classifier)
+            if len(np.unique(y_true)) > 1:  # Only if both classes are present
+                try:
+                    auc_roc = roc_auc_score(y_true, y_score)
+                except Exception as e:
+                    logger.warning(f"Error calculating AUC-ROC: {e}")
+            else:
+                logger.warning("Only one class present in evaluation, AUC-ROC defaulting to 0.5")
+            
+            # Create metrics dictionary
+            metrics = {
+                "accuracy": accuracy / 100.0,  # Convert from percentage to proportion
+                "precision": precision,
+                "recall": recall,
+                "specificity": specificity,
+                "f1_score": f1,
+                "auc_roc": auc_roc,
+                "true_positives": int(tp),
+                "false_positives": int(fp),
+                "true_negatives": int(tn),
+                "false_negatives": int(fn)
+            }
+            
+            logger.info(f"Ensemble evaluation - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.2f}%, "
+                    f"Precision: {precision:.4f}, Recall: {recall:.4f}, "
+                    f"F1: {f1:.4f}, AUC-ROC: {auc_roc:.4f}")
+        
+        except Exception as e:
+            logger.error(f"Error calculating fraud metrics: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            # Fallback to basic accuracy calculation
+            correct = np.sum((y_pred > 0.5) == (y_true > 0.5))
+            accuracy = 100.0 * correct / len(y_true) if len(y_true) > 0 else 0.0
+            
+            metrics = {
+                "accuracy": accuracy / 100.0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1_score": 0.0,
+                "auc_roc": 0.5,
+                "true_positives": 0,
+                "false_positives": 0,
+                "true_negatives": 0,
+                "false_negatives": 0
+            }
+            
+            logger.info(f"Ensemble evaluation (basic) - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.2f}%")
+        
+        # Fix for imbalanced classification problem
+        if np.sum(y_pred) == 0 and np.sum(y_true) > 0:
+            # All predictions negative but some positives exist
+            logger.warning("No positive predictions. Using default metrics values.")
+            # Default values for completely imbalanced case
+            metrics = {
+                "accuracy": (np.sum(y_true == 0) / len(y_true)) if len(y_true) > 0 else 0.0,
+                "precision": 0.0,  # Can't calculate precision with no positive predictions
+                "recall": 0.0,     # Recall is 0 when no positives are predicted
+                "specificity": 1.0, # All negatives correctly classified
+                "f1_score": 0.0,   # F1 is 0 when either precision or recall is 0
+                "auc_roc": 0.5,    # Random classifier
+                "true_positives": 0,
+                "false_positives": 0,
+                "true_negatives": np.sum(y_true == 0),
+                "false_negatives": np.sum(y_true == 1)
+            }
+        
+        return accuracy, avg_loss, metrics
     
     def _evaluate_single_model(self, model: nn.Module, data_loader: DataLoader) -> Tuple[float, float]:
         """
@@ -1703,7 +1911,6 @@ class GAStackingClient(fl.client.NumPyClient):
             json.dump(self.metrics_history, f, indent=2)
         logger.info(f"Saved metrics history to {filepath}")
 
-
 def start_client(
     server_address: str = "127.0.0.1:8080",
     ipfs_url: str = "http://127.0.0.1:5001",
@@ -1717,7 +1924,9 @@ def start_client(
     ensemble_size: int = 5,
     device: str = "cpu",
     ga_generations: int = 20,
-    ga_population_size: int = 30
+    ga_population_size: int = 30,
+    train_file: Optional[str] = None,
+    test_file: Optional[str] = None
 ) -> None:
     """
     Start a federated learning client with GA-Stacking ensemble optimization.
@@ -1736,10 +1945,26 @@ def start_client(
         device: Device to use for training ('cpu' or 'cuda')
         ga_generations: Number of GA generations to run
         ga_population_size: Size of GA population
+        train_file: Path to the training data file
+        test_file: Path to the test data file
     """
-    # Create client ID if not provided
-    if client_id is None:
+    # Extract client ID from training file path if not explicitly provided
+    if client_id is None and train_file is not None:
+        # Try to extract client ID from the filename
+        filename = os.path.basename(train_file)
+        if filename.startswith("client-") and "_train" in filename:
+            # Extract client-X from filename like "client-1_train.txt"
+            client_id = filename.split("_train")[0]
+            logger.info(f"Extracted client ID from training file: {client_id}")
+        else:
+            # Use a default client ID with timestamp to avoid collisions
+            timestamp = int(time.time())
+            client_id = f"client-{timestamp}"
+            logger.info(f"Using generated client ID: {client_id}")
+    elif client_id is None:
+        # Default client ID if no train file or explicit ID provided
         client_id = f"client-{os.getpid()}"
+        logger.info(f"Using process-based client ID: {client_id}")
     
     # Create metrics directory
     os.makedirs(f"metrics/{client_id}", exist_ok=True)
@@ -1763,6 +1988,44 @@ def start_client(
             logger.error(f"Failed to initialize blockchain connector: {e}")
             logger.warning("Continuing without blockchain features")
     
+    # Determine dataset files to load
+    if train_file is None or test_file is None:
+        # If files aren't explicitly provided, derive from client ID
+        derived_train_file = f"{client_id}_train.txt"
+        derived_test_file = f"{client_id}_test.txt"
+        
+        # Check if derived files exist
+        if not os.path.exists(derived_train_file) or not os.path.exists(derived_test_file):
+            logger.warning(f"Derived dataset files not found: {derived_train_file}, {derived_test_file}")
+            
+            # Try to find in data directory
+            data_dir_train = f"data/{client_id}_train.txt"
+            data_dir_test = f"data/{client_id}_test.txt"
+            
+            if os.path.exists(data_dir_train) and os.path.exists(data_dir_test):
+                logger.info(f"Found dataset files in data directory")
+                train_file = data_dir_train
+                test_file = data_dir_test
+            else:
+                # Fall back to default client-1 files
+                logger.warning(f"Using default dataset files")
+                train_file = "client-1_train.txt"
+                test_file = "client-1_test.txt"
+                
+                # Check if default files exist in data directory
+                if not os.path.exists(train_file) or not os.path.exists(test_file):
+                    data_dir_default_train = "data/client-1_train.txt"
+                    data_dir_default_test = "data/client-1_test.txt"
+                    
+                    if os.path.exists(data_dir_default_train) and os.path.exists(data_dir_default_test):
+                        train_file = data_dir_default_train
+                        test_file = data_dir_default_test
+        else:
+            train_file = derived_train_file
+            test_file = derived_test_file
+    
+    logger.info(f"Using dataset files: {train_file} and {test_file}")
+
     # Load dataset from files
     def load_dataset_from_files(train_file, test_file):
         """
@@ -1778,9 +2041,31 @@ def start_client(
             input_dim: Input dimension for the model
             output_dim: Output dimension for the model
         """
+        # Import required libraries
+        from sklearn.preprocessing import StandardScaler, OneHotEncoder
+        from sklearn.compose import ColumnTransformer
+        import numpy as np
+        
+        # Check if files exist
+        if not os.path.exists(train_file):
+            raise FileNotFoundError(f"Training file not found: {train_file}")
+        if not os.path.exists(test_file):
+            raise FileNotFoundError(f"Test file not found: {test_file}")
+            
         # Read files with comment handling
         train_df = pd.read_csv(train_file, comment='#')
         test_df = pd.read_csv(test_file, comment='#')
+        
+        # Check for Credit Card Fraud dataset (Kaggle format)
+        is_creditcard_dataset = False
+        if 'V1' in train_df.columns and 'V2' in train_df.columns and 'V3' in train_df.columns:
+            is_creditcard_dataset = True
+            logger.info("Detected Credit Card Fraud dataset (Kaggle format)")
+            
+            # If the target column is "Class", rename it to "is_fraud" for consistency
+            if 'Class' in train_df.columns:
+                train_df = train_df.rename(columns={'Class': 'is_fraud'})
+                test_df = test_df.rename(columns={'Class': 'is_fraud'})
         
         # Identify target column (fraud detection dataset uses 'is_fraud')
         if 'is_fraud' in train_df.columns:
@@ -1788,8 +2073,8 @@ def start_client(
         elif 'target' in train_df.columns:
             target_column = 'target'
         else:
-            # Try to identify the target column - assume it's the last column if not found
-            potential_targets = ['label', 'class', 'fraud', 'is_fraud']
+            # Try to identify the target column
+            potential_targets = ['label', 'class', 'fraud', 'Class']
             target_found = False
             
             for potential in potential_targets:
@@ -1799,43 +2084,83 @@ def start_client(
                     break
                     
             if not target_found:
+                # Last resort: use the last column as target
                 target_column = train_df.columns[-1]
                 logger.warning(f"Could not identify target column, using the last column: {target_column}")
         
         # Extract features and target
         feature_columns = [col for col in train_df.columns if col != target_column]
         
-        # Identify categorical and numerical columns
-        categorical_cols = []
-        numerical_cols = []
-        
-        for col in feature_columns:
-            if train_df[col].dtype == 'object' or train_df[col].dtype.name == 'category':
-                categorical_cols.append(col)
-            else:
-                numerical_cols.append(col)
-        
-        logger.info(f"Identified {len(categorical_cols)} categorical and {len(numerical_cols)} numerical features")
-        
-        # Create preprocessing pipeline
-        if categorical_cols:
-            # We have categorical columns to handle
-            preprocessor = ColumnTransformer(
-                transformers=[
-                    ('num', StandardScaler(), numerical_cols),
-                    ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
-                ])
+        # For Credit Card dataset, special handling
+        if is_creditcard_dataset:
+            # PCA components (V1-V28) are already normalized, only need to normalize Amount
+            if 'Amount' in train_df.columns:
+                # Replace negative values with small positive value before log transform
+                train_df['Amount'] = train_df['Amount'].clip(lower=0.0001)
+                test_df['Amount'] = test_df['Amount'].clip(lower=0.0001)
+                
+                # Log-transform and standardize Amount
+                train_df['Amount'] = np.log1p(train_df['Amount'])
+                test_df['Amount'] = np.log1p(test_df['Amount'])
+                
+            # Drop Time column if it exists (we've already extracted temporal features)
+            if 'Time' in train_df.columns:
+                train_df = train_df.drop('Time', axis=1)
+                test_df = test_df.drop('Time', axis=1)
+                
+            # Drop any non-feature columns
+            for col in ['original_time', 'original_amount', 'cluster', 'amount_bin']:
+                if col in train_df.columns:
+                    train_df = train_df.drop(col, axis=1)
+                if col in test_df.columns:
+                    test_df = test_df.drop(col, axis=1)
+                
+            # Update feature columns after dropping
+            feature_columns = [col for col in train_df.columns if col != target_column]
+            
+            # No categorical columns to encode in this dataset
+            categorical_cols = []
+            numerical_cols = feature_columns
         else:
-            # Only numerical data
-            preprocessor = StandardScaler()
+            # For other datasets, identify categorical and numerical columns
+            categorical_cols = []
+            numerical_cols = []
+            
+            for col in feature_columns:
+                if train_df[col].dtype == 'object' or train_df[col].dtype.name == 'category':
+                    categorical_cols.append(col)
+                else:
+                    numerical_cols.append(col)
         
-        # Fit preprocessor on training data
-        preprocessor.fit(train_df[feature_columns])
+        logger.info(f"Dataset features: {len(feature_columns)} total, "
+                f"{len(categorical_cols)} categorical, {len(numerical_cols)} numerical")
         
-        # Transform data
-        X_train = preprocessor.transform(train_df[feature_columns])
-        X_test = preprocessor.transform(test_df[feature_columns])
-        
+        # Create preprocessing pipeline if needed
+        if not is_creditcard_dataset:
+            if categorical_cols:
+                # We have categorical columns to handle
+                preprocessor = ColumnTransformer(
+                    transformers=[
+                        ('num', StandardScaler(), numerical_cols),
+                        ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
+                    ])
+                
+                # Fit preprocessor on training data
+                preprocessor.fit(train_df[feature_columns])
+                
+                # Transform data
+                X_train = preprocessor.transform(train_df[feature_columns])
+                X_test = preprocessor.transform(test_df[feature_columns])
+            else:
+                # Only numerical data, just standardize
+                scaler = StandardScaler()
+                X_train = scaler.fit_transform(train_df[feature_columns])
+                X_test = scaler.transform(test_df[feature_columns])
+        else:
+            # For Credit Card dataset, features are already processed
+            X_train = train_df[feature_columns].values
+            X_test = test_df[feature_columns].values
+            
         # Convert sparse matrix to dense if needed
         if hasattr(X_train, 'toarray'):
             X_train = X_train.toarray()
@@ -1890,19 +2215,20 @@ def start_client(
         )
         
         return train_loader, test_loader, input_dim, output_dim
-
-    # Determine which dataset files to load based on client_id
-    train_file = f"{client_id}_train.txt"
-    test_file = f"{client_id}_test.txt"
-
-    # Check if files exist
-    if not os.path.exists(train_file) or not os.path.exists(test_file):
-        logger.warning(f"Dataset files not found for {client_id}, using default files")
-        train_file = "client-1_train.txt"  # Fallback to client-1 if files not found
-        test_file = "client-1_test.txt"
-
     # Load dataset
-    train_loader, test_loader, input_dim, output_dim = load_dataset_from_files(train_file, test_file)
+    try:
+        train_loader, test_loader, data_input_dim, data_output_dim = load_dataset_from_files(train_file, test_file)
+        
+        # Override input_dim and output_dim with actual values from data if not explicitly set
+        if input_dim == 10:  # This is the default value
+            input_dim = data_input_dim
+            logger.info(f"Using input dimension from dataset: {input_dim}")
+        
+        if output_dim == 1:  # This is the default value for fraud detection
+            output_dim = data_output_dim
+    except Exception as e:
+        logger.error(f"Failed to load dataset: {e}")
+        raise
     
     # Create client
     client = GAStackingClient(
@@ -1929,7 +2255,6 @@ def start_client(
     
     logger.info(f"Client {client_id} completed federated learning with GA-Stacking")
 
-
 if __name__ == "__main__":
     import argparse
     
@@ -1941,12 +2266,12 @@ if __name__ == "__main__":
     parser.add_argument("--wallet-address", type=str, help="Client's Ethereum wallet address")
     parser.add_argument("--private-key", type=str, help="Client's private key (for signing transactions)")
     parser.add_argument("--client-id", type=str, help="Client identifier")
-    parser.add_argument("--input-dim", type=int, default=10, help="Input dimension for the model")
+    parser.add_argument("--input-dim", type=int, default=31, help="Input dimension for the model")
     parser.add_argument("--output-dim", type=int, default=1, help="Output dimension for the model")
-    parser.add_argument("--ensemble-size", type=int, default=5, help="Number of models in the ensemble")
+    parser.add_argument("--ensemble-size", type=int, default=8, help="Number of models in the ensemble")
     parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"], help="Device for training")
-    parser.add_argument("--ga-generations", type=int, default=20, help="Number of GA generations to run")
-    parser.add_argument("--ga-population-size", type=int, default=30, help="Size of GA population")
+    parser.add_argument("--ga-generations", type=int, default=3, help="Number of GA generations to run")
+    parser.add_argument("--ga-population-size", type=int, default=10, help="Size of GA population")
     parser.add_argument("--train-file", type=str, help="Path to training data file")
     parser.add_argument("--test-file", type=str, help="Path to test data file")
     args = parser.parse_args()
@@ -1959,11 +2284,6 @@ if __name__ == "__main__":
                 print(f"Loaded contract address from file: {args.contract_address}")
         except FileNotFoundError:
             print("No contract address provided or found in file")
-    
-    # Override train/test files if provided
-    if args.train_file and args.test_file:
-        train_file = args.train_file
-        test_file = args.test_file
     
     start_client(
         server_address=args.server_address,
