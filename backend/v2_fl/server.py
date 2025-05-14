@@ -184,177 +184,154 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
     def initialize_parameters(
         self, client_manager: fl.server.client_manager.ClientManager
     ) -> Optional[Parameters]:
-        """Initialize global model parameters for Credit Card Fraud detection with optimized base models."""
-        
-        # Define the correct dimensions for the Credit Card Fraud dataset after preprocessing
-        input_dim = 31  # V1-V28 plus Amount and hour_of_day
-        output_dim = 1  # Binary classification (0 = legitimate, 1 = fraud)
-        
-        # Create an ensemble of base models optimized for fraud detection
+        input_dim = 31
+        output_dim = 1
+
         initial_ensemble_config = []
-        
-        # 1. Logistic Regression - good baseline with interpretability
+
+        # 1. Logistic Regression
         initial_ensemble_config.append({
             "estimator": "lr",
             "model_type": "lr",
             "input_dim": input_dim,
             "output_dim": output_dim,
             "coef": [[random.uniform(-0.01, 0.01) for _ in range(input_dim)]],
-            "intercept": [-3.0],  # Strong negative bias (fraud is extremely rare)
+            "intercept": [-3.0],
             "penalty": "l2",
-            "C": 0.1,  # Stronger regularization for PCA-transformed features
-            "class_weight": {0: 1, 1: 100},  # Extreme imbalance needs stronger weight
-            "solver": "liblinear",  # Good for small datasets
+            "C": 1.0,
+            "class_weight": None,
+            "solver": "liblinear",
             "max_iter": 1000,
             "random_state": 42
         })
-        
-        # 2. Support Vector Classifier - robust to imbalanced data
+
+        # 2. SVC
         initial_ensemble_config.append({
             "estimator": "svc",
             "model_type": "svc",
             "input_dim": input_dim,
             "output_dim": output_dim,
             "kernel": "rbf",
-            "C": 100.0,  # Much higher C for extreme imbalance
-            "gamma": "auto",  # Better for PCA-transformed features
+            "C": 1.0,
+            "gamma": "scale",
             "probability": True,
-            "class_weight": {0: 1, 1: 100},  # More aggressive weighting
+            "class_weight": None,
             "random_state": 42,
             "dual_coef": [[0.01, -0.01]],
             "support_vectors": [
                 [random.uniform(-0.1, 0.1) for _ in range(input_dim)],
                 [random.uniform(-0.1, 0.1) for _ in range(input_dim)]
             ],
-            "intercept": [-1.0]  # Stronger negative bias
+            "intercept": [0.0]
         })
-        
-        # 3. Random Forest - handles non-linear relationships well
+
+        # 3. Random Forest
         initial_ensemble_config.append({
             "estimator": "rf",
             "model_type": "rf",
             "input_dim": input_dim,
             "output_dim": output_dim,
             "n_estimators": 100,
-            "criterion": "entropy",  # Better for highly imbalanced data
-            "max_depth": 10,  # Limit depth to avoid overfitting
-            "min_samples_split": 10,  # More conservative splits
-            "min_samples_leaf": 5,  # More samples per leaf
-            "max_features": 0.7,  # Use 70% of features for each tree
+            "criterion": "gini",
+            "max_depth": None,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "max_features": "auto",
             "bootstrap": True,
-            "class_weight": {0: 1, 1: 100},  # Strong weighting for fraud class
+            "class_weight": None,
             "random_state": 42,
-            # V1-V4 typically carry more info in PCA transformed data
-            "feature_importances": [0.05, 0.05, 0.05, 0.05] + [(1.0-0.2)/27] * 27
+            "feature_importances": [1.0/input_dim] * input_dim
         })
-        
-        # 4. XGBoost - typically performs well for fraud detection
+
+        # 4. KNN
         initial_ensemble_config.append({
-            "estimator": "xgb",
-            "model_type": "xgb",
+            "estimator": "knn",
+            "model_type": "knn",
             "input_dim": input_dim,
             "output_dim": output_dim,
-            "n_estimators": 100,
-            "max_depth": 5,  # Slightly shallower for PCA data
-            "learning_rate": 0.05,  # Slower learning rate
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
-            "objective": "binary:logistic",
-            "scale_pos_weight": 580,  # ~580:1 class imbalance
-            "random_state": 42,
-            "feature_importances": [0.05, 0.05, 0.05, 0.05] + [(1.0-0.2)/27] * 27
+            "n_neighbors": 5,
+            "weights": "uniform",
+            "algorithm": "auto",
+            "leaf_size": 30,
+            "p": 2,
+            "metric": "minkowski"
         })
-        
-        # 5. LightGBM - efficient gradient boosting implementation
-        initial_ensemble_config.append({
-            "estimator": "lgbm",
-            "model_type": "lgbm",
-            "input_dim": input_dim,
-            "output_dim": output_dim,
-            "n_estimators": 100,
-            "max_depth": 5,
-            "learning_rate": 0.03,  # Slower learning rate
-            "subsample": 0.7,
-            "colsample_bytree": 0.7,
-            "objective": "binary",
-            "is_unbalance": True,  # Better than class_weight for extreme imbalance
-            "boosting_type": "dart",  # DART can work better for fraud
-            "importance_type": "gain",
-            "random_state": 42,
-            "feature_importances": [0.05, 0.05, 0.05, 0.05] + [(1.0-0.2)/27] * 27
-        })
-        
-        # 6. CatBoost - handles categorical features well (though we don't have any in this dataset)
+
+        # 5. CatBoost
         initial_ensemble_config.append({
             "estimator": "catboost",
             "model_type": "catboost",
             "input_dim": input_dim,
             "output_dim": output_dim,
             "iterations": 100,
-            "depth": 5,
-            "learning_rate": 0.03,
+            "depth": 6,
+            "learning_rate": 0.1,
             "loss_function": "Logloss",
             "verbose": False,
-            "class_weights": [1, 580],  # Adjust for extreme imbalance
-            "random_state": 42,
-            "feature_importances": [0.05, 0.05, 0.05, 0.05] + [(1.0-0.2)/27] * 27
+            "random_state": 42
         })
-        
-        # 7. Isolation Forest - special addition specifically for fraud detection
-        # Note: Your client code will need to be updated to handle this model type
+
+        # 6. LightGBM
         initial_ensemble_config.append({
-            "estimator": "isolation_forest",
-            "model_type": "isolation_forest",
+            "estimator": "lgbm",
+            "model_type": "lgbm",
             "input_dim": input_dim,
             "output_dim": output_dim,
             "n_estimators": 100,
-            "max_samples": "auto",
-            "contamination": 0.002,  # Slightly higher than known fraud rate
-            "max_features": 1.0,
-            "bootstrap": False,
-            "n_jobs": -1,
-            "random_state": 42,
-            "behaviour": "new",
-            "feature_importances": [1.0/input_dim] * input_dim
+            "max_depth": -1,
+            "learning_rate": 0.1,
+            "subsample": 1.0,
+            "colsample_bytree": 1.0,
+            "objective": "binary",
+            "boosting_type": "gbdt",
+            "random_state": 42
         })
-        
-        # 8. Meta-learner model - stacking layer using logistic regression
+
+        # 7. XGBoost
+        initial_ensemble_config.append({
+            "estimator": "xgb",
+            "model_type": "xgb",
+            "input_dim": input_dim,
+            "output_dim": output_dim,
+            "n_estimators": 100,
+            "max_depth": 6,
+            "learning_rate": 0.1,
+            "subsample": 1.0,
+            "colsample_bytree": 1.0,
+            "objective": "binary:logistic",
+            "use_label_encoder": False,
+            "eval_metric": "logloss",
+            "random_state": 42
+        })
+
+        # Optionally add meta-learner for stacking
         initial_ensemble_config.append({
             "estimator": "meta_lr",
             "model_type": "meta_lr",
             "input_dim": 7,  # Number of base models
             "output_dim": output_dim,
-            "penalty": "l1",  # L1 regularization for sparse weights
-            "C": 0.5,  # Moderate regularization
-            "solver": "saga",  # Better for L1 penalty
-            "max_iter": 2000,
+            "penalty": "l2",
+            "C": 1.0,
+            "solver": "liblinear",
+            "max_iter": 1000,
             "random_state": 42,
-            # Initialize with weights that favor ensemble diversity
-            "coef": [[0.10, 0.15, 0.15, 0.20, 0.15, 0.15, 0.10]],
-            "intercept": [-2.0]  # Strong negative bias for extreme imbalance
+            "coef": [[1/7.0]*7],
+            "intercept": [0.0]
         })
-        
-        # Define model names in the same order as the configs
-        model_names = ["lr", "svc", "rf", "xgb", "lgbm", "catboost", "isolation_forest", "meta_lr"]
-        
-        # Set initial ensemble weights - give higher weights to gradient boosting methods
-        # and anomaly detection models which typically perform well for extreme imbalance
-        weights = [0.05, 0.10, 0.10, 0.25, 0.20, 0.15, 0.10, 0.05]
-        
-        # Create ensemble state with initial configuration
+
+        model_names = ["lr", "svc", "rf", "knn", "catboost", "lgbm", "xgb", "meta_lr"]
+        weights = [1/7.0]*7 + [0.0]  # Or your preferred initial weights
+
         ensemble_state = {
             "model_parameters": initial_ensemble_config,
             "weights": weights,
             "model_names": model_names
         }
-        
-        # Serialize ensemble state
+
         ensemble_bytes = json.dumps(ensemble_state).encode('utf-8')
         parameters = ndarrays_to_parameters([np.frombuffer(ensemble_bytes, dtype=np.uint8)])
-        
-        logger.info(f"Initialized server with Credit Card Fraud detection ensemble: input_dim={input_dim}, meta_input_dim={len(model_names)-1}")
-        logger.info(f"Base models: {', '.join(model_names[:-1])}")
-        
+
+        logger.info(f"Initialized server with ensemble: {', '.join(model_names)}")
         return parameters
 
     def configure_fit(

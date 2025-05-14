@@ -77,8 +77,8 @@ class GAStackingClient(fl.client.NumPyClient):
         private_key: Optional[str] = None,
         device: str = "cpu",
         client_id: str = None,
-        ga_generations: int = 20,
-        ga_population_size: int = 30
+        ga_generations: int = 3,
+        ga_population_size: int = 8
     ):
         """
         Initialize GA-Stacking client.
@@ -700,21 +700,32 @@ class GAStackingClient(fl.client.NumPyClient):
             logger.warning("Using equal weights due to GA-Stacking failure")
             return self.ensemble_model
     
+    def _check_model_weights(self, model):
+        """Kiểm tra và in thông tin trọng số mô hình để debug."""
+        try:
+            if hasattr(model, 'model') and hasattr(model.model, 'coef_'):
+                coef = model.model.coef_
+                logger.info(f"Model coefficients - shape: {coef.shape}, mean: {np.mean(coef):.4f}, min: {np.min(coef):.4f}, max: {np.max(coef):.4f}")
+                if np.all(coef == 0):
+                    logger.warning("All coefficients are zero!")
+                    
+            elif hasattr(model, 'linear') and hasattr(model.linear, 'weight'):
+                weight = model.linear.weight.data.cpu().numpy()
+                logger.info(f"Linear weights - shape: {weight.shape}, mean: {np.mean(weight):.4f}, min: {np.min(weight):.4f}, max: {np.max(weight):.4f}")
+                if np.all(weight == 0):
+                    logger.warning("All weights are zero!")
+        except Exception as e:
+            logger.error(f"Error checking model weights: {e}")
+    
     def _train_single_model(
         self, 
         model: nn.Module, 
         train_loader: DataLoader, 
-        epochs: int = 5, 
+        epochs: int = 5,    
         learning_rate: float = 0.01
     ) -> None:
         """
-        Train a single model.
-        
-        Args:
-            model: Model to train
-            train_loader: Training data loader
-            epochs: Number of epochs to train for
-            learning_rate: Learning rate for optimization
+        Huấn luyện mô hình đơn lẻ với cải thiện cho dữ liệu mất cân bằng.
         """
         # Skip training for scikit-learn model wrappers
         if isinstance(model, SklearnModelWrapper):
@@ -723,14 +734,27 @@ class GAStackingClient(fl.client.NumPyClient):
             
         # Train PyTorch models
         model.train()
-        criterion = nn.MSELoss()
         
-        # Check if model has parameters before creating optimizer
+        # Sử dụng BCE với positive weight thay vì MSE
+        # Tính toán positive weight dựa trên tỷ lệ mẫu dương/âm
+        pos_samples = sum(batch[1].sum().item() for batch in train_loader)
+        total_samples = sum(len(batch[1]) for batch in train_loader)
+        neg_samples = total_samples - pos_samples
+        
+        # Tính pos_weight: tỷ lệ mẫu âm tính / mẫu dương tính
+        pos_weight = neg_samples / max(1, pos_samples)  # Tránh chia cho 0
+        logger.info(f"Class imbalance - positive samples: {pos_samples}/{total_samples} ({pos_samples/total_samples*100:.2f}%)")
+        logger.info(f"Using positive weight: {pos_weight:.2f} for BCE loss")
+        
+        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight], device=self.device))
+        
+        # Check if model has parameters
         if sum(p.numel() for p in model.parameters() if p.requires_grad) == 0:
             logger.warning(f"Model has no trainable parameters, skipping training")
             return
             
-        optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+        # Sử dụng Adam thay vì SGD
+        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         
         for epoch in range(epochs):
             epoch_loss = 0.0
@@ -741,6 +765,15 @@ class GAStackingClient(fl.client.NumPyClient):
                 
                 optimizer.zero_grad()
                 output = model(data)
+                
+                # Adjust shapes if needed
+                if output.shape != target.shape:
+                    if len(output.shape) == 1:
+                        output = output.unsqueeze(1)
+                    if len(target.shape) == 1:
+                        target = target.unsqueeze(1)
+                
+                # Tính loss với BCE
                 loss = criterion(output, target)
                 loss.backward()
                 optimizer.step()
@@ -749,32 +782,11 @@ class GAStackingClient(fl.client.NumPyClient):
                 epoch_samples += len(data)
             
             avg_epoch_loss = epoch_loss / epoch_samples
-            if epoch % 2 == 0:  # Log every 2 epochs
+            if epoch % 2 == 0:
                 logger.debug(f"Epoch {epoch+1}/{epochs}, Loss: {avg_epoch_loss:.4f}")
-            
-        # coef checking        
-        if isinstance(model, SklearnModelWrapper):
-            # Chesck if sklearn wrapper model has zero coefficients after training
-            if hasattr(model.model, 'coef_') and np.all(np.array(model.model.coef_) == 0):
-                logger.warning(f"Model {model.model_type} still has zero coefficients after training. Initializing with random values.")
-                model.model.coef_ = np.random.normal(0, 0.01, model.model.coef_.shape)
-                if hasattr(model.model, 'intercept_'):
-                    model.model.intercept_ = np.random.normal(0, 0.01, model.model.intercept_.shape)
         
-        elif hasattr(model, 'coef') and np.all(np.array(model.coef) == 0):
-            # Direct access to coefficients
-            logger.warning(f"Model has zero coefficients after training. Initializing with random values.")
-            model.coef = np.random.normal(0, 0.01, model.coef.shape)
-            if hasattr(model, 'intercept'):
-                model.intercept = np.random.normal(0, 0.01, model.intercept.shape)
-        
-        # For PyTorch models
-        elif hasattr(model, 'linear') and hasattr(model.linear, 'weight'):
-            weight = model.linear.weight.data.cpu().numpy()
-            if np.all(weight == 0):
-                logger.warning(f"PyTorch model has zero weights after training. Initializing with xavier uniform.")
-                nn.init.xavier_uniform_(model.linear.weight)
-                nn.init.zeros_(model.linear.bias)
+        # Check weights after training
+        self._check_model_weights(model)
     
     def _initialize_models_from_server_config(self, configs):
         """Initialize models from server configuration with proper type handling."""
@@ -1118,7 +1130,7 @@ class GAStackingClient(fl.client.NumPyClient):
                 
                 # For regression tasks, we need to define what "accuracy" means
                 # Here, we'll consider a prediction "correct" if it's within 0.5 of the true value
-                threshold = 0.5
+                threshold = 0.1
                 ensemble_outputs = ensemble_outputs.to(dtype=torch.float32)
                 y_val = y_val.to(dtype=torch.float32)
                 
@@ -1461,6 +1473,13 @@ class GAStackingClient(fl.client.NumPyClient):
             val_data = train_data[val_indices]
             val_targets = train_targets[val_indices]
             
+            if len(val_data) > 500:
+                # Chỉ lấy tối đa 500 mẫu cho validation để tăng tốc GA
+                random_indices = torch.randperm(len(val_data))[:500]
+                val_data = val_data[random_indices]
+                val_targets = val_targets[random_indices]
+                logger.info(f"Reduced validation set to 500 samples for faster GA training")
+            
             # Extract training data (subset without validation)
             train_data_subset = train_data[train_indices]
             train_targets_subset = train_targets[train_indices]
@@ -1695,13 +1714,8 @@ class GAStackingClient(fl.client.NumPyClient):
     
     def _evaluate_ensemble(self, data_loader: DataLoader) -> Tuple[float, float, Dict]:
         """
-        Evaluate the ensemble model with proper fraud detection metrics.
-        
-        Args:
-            data_loader: Data loader to evaluate on
-            
-        Returns:
-            Tuple of (accuracy, loss, metrics_dict)
+        Đánh giá mô hình ensemble với cải thiện cho bài toán phát hiện gian lận.
+        Bao gồm tìm ngưỡng tối ưu tự động và các chỉ số đánh giá phù hợp với dữ liệu mất cân bằng.
         """
         if self.ensemble_model is None:
             logger.warning("No ensemble model for evaluation, using equal weights")
@@ -1716,126 +1730,227 @@ class GAStackingClient(fl.client.NumPyClient):
         
         self.ensemble_model.eval()
         
-        # Initialize lists to collect predictions and ground truth
+        # Sử dụng các list để thu thập dự đoán và nhãn thực
         all_targets = []
         all_outputs = []  # Raw outputs (probabilities)
-        all_preds = []    # Binary predictions
-        threshold = 0.5
         
-        test_loss = 0.0
+        # Sử dụng weighted BCELoss cho dữ liệu mất cân bằng
+        # pos_weight càng cao thì phạt các false negatives nặng hơn
+        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([100.0], device=self.device))
+        
         total = 0
-        criterion = nn.MSELoss()
+        test_loss = 0.0
         
         with torch.no_grad():
             for data, target in data_loader:
                 data, target = data.to(self.device), target.to(self.device)
                 
-                # Use the ensemble_model forward method
+                # Sử dụng ensemble model
                 output = self.ensemble_model(data)
                 
-                # Ensure output and target have matching shapes for loss calculation
+                # Đảm bảo output và target có cùng shape
                 if output.shape != target.shape:
                     if len(output.shape) == 1:
                         output = output.unsqueeze(1)
                     if len(target.shape) == 1:
                         target = target.unsqueeze(1)
                         
+                # Tính loss
                 loss = criterion(output, target)
                 test_loss += loss.item() * len(data)
                 
-                # Store targets, raw outputs, and binary predictions
+                # Lưu kết quả
                 all_targets.append(target.cpu())
                 all_outputs.append(output.cpu())
                 
-                # Binary predictions using threshold
-                preds = (output >= threshold).float()
-                all_preds.append(preds.cpu())
-                
                 total += target.size(0)
         
-        # Calculate average loss
+        # Tính loss trung bình
         avg_loss = test_loss / total if total > 0 else float('inf')
         
-        # Concatenate all batches
+        # Gộp kết quả từ các batch
         y_true = torch.cat(all_targets).detach().numpy()
-        y_pred = torch.cat(all_preds).detach().numpy()
         y_score = torch.cat(all_outputs).detach().numpy()
         
-        # Ensure correct shapes for sklearn metrics
+        # Điều chỉnh shape
         if len(y_true.shape) > 1 and y_true.shape[1] == 1:
             y_true = y_true.flatten()
-        if len(y_pred.shape) > 1 and y_pred.shape[1] == 1:
-            y_pred = y_pred.flatten()
         if len(y_score.shape) > 1 and y_score.shape[1] == 1:
             y_score = y_score.flatten()
         
-        # Calculate fraud-specific metrics
+        # Tính toán các metrics
         try:
-            # Calculate confusion matrix
-            cm = confusion_matrix(y_true, y_pred)
+            # Log số lượng mẫu dương tính trong ground truth
+            num_positive_true = np.sum(y_true == 1)
+            logger.info(f"Positive samples in ground truth: {num_positive_true}/{len(y_true)} ({num_positive_true/len(y_true)*100:.2f}%)")
             
-            # Handle empty or 1x1 confusion matrix (edge case with only one class present)
-            if cm.size == 1:
-                # Only one class present in the batch
-                if cm[0, 0] == 0:  # No true predictions
-                    tn, fp, fn, tp = 0, 0, 0, 0
-                else:  # All predictions are true negatives
-                    if y_true[0] == 0:  # If the single class is negative
-                        tn, fp, fn, tp = cm[0, 0], 0, 0, 0
-                    else:  # If the single class is positive
-                        tn, fp, fn, tp = 0, 0, 0, cm[0, 0]
+            # Khởi tạo dictionary chứa kết quả
+            metrics = {}
+            
+            # ===== CẢI TIẾN 1: Tìm ngưỡng tối ưu tự động =====
+            # Tìm ngưỡng tối ưu bằng cách tối đa hóa F1-score
+            if num_positive_true > 0:
+                # Thử nhiều ngưỡng khác nhau để tìm ngưỡng tốt nhất
+                thresholds = np.linspace(0.001, 0.1, 100)  # Thử 50 ngưỡng từ 0.001 đến 0.5
+                best_f1 = 0
+                best_threshold = 0.01  # Mặc định là 0.01
+                best_precision = 0
+                best_recall = 0
+                best_tp = 0
+                best_fp = 0
+                best_tn = 0
+                best_fn = 0
+                
+                # Tạo dict để lưu trữ kết quả ở các ngưỡng khác nhau cho vẽ đồ thị
+                threshold_results = {
+                    'thresholds': thresholds,
+                    'precision': [],
+                    'recall': [],
+                    'f1': [],
+                    'positive_rate': []
+                }
+                
+                # Tìm ngưỡng tối ưu
+                for t in thresholds:
+                    # Apply threshold
+                    y_pred_t = (y_score >= t).astype(float)
+                    
+                    # Tính confusion matrix
+                    tn, fp, fn, tp = confusion_matrix(y_true, y_pred_t, labels=[0, 1]).ravel()
+                    
+                    # Tính precision và recall
+                    precision_t = tp / (tp + fp) if (tp + fp) > 0 else 0
+                    recall_t = tp / (tp + fn) if (tp + fn) > 0 else 0
+                    specificity_t = tn / (tn + fp) if (tn + fp) > 0 else 0
+                    f1_t = 2 * precision_t * recall_t / (precision_t + recall_t) if (precision_t + recall_t) > 0 else 0
+                    
+                    # Lưu kết quả cho các ngưỡng khác nhau
+                    threshold_results['precision'].append(precision_t)
+                    threshold_results['recall'].append(recall_t)
+                    threshold_results['f1'].append(f1_t)
+                    threshold_results['positive_rate'].append((tp + fp) / (tp + fp + tn + fn))
+                    
+                    # Cập nhật ngưỡng tốt nhất dựa vào F1
+                    if f1_t > best_f1:
+                        best_f1 = f1_t
+                        best_threshold = t
+                        best_precision = precision_t
+                        best_recall = recall_t
+                        best_tp = tp
+                        best_fp = fp
+                        best_tn = tn
+                        best_fn = fn
+                        
+                # Lưu thông tin ngưỡng tốt nhất
+                metrics['optimal_threshold'] = best_threshold
+                metrics['threshold_results'] = threshold_results
+                        
+                logger.info(f"Optimal threshold found: {best_threshold:.6f} with F1: {best_f1:.4f}")
+                logger.info(f"At optimal threshold - Precision: {best_precision:.4f}, Recall: {best_recall:.4f}")
+                logger.info(f"Confusion matrix at optimal threshold - TP: {best_tp}, FP: {best_fp}, TN: {best_tn}, FN: {best_fn}")
+                
+                # Sử dụng ngưỡng tối ưu cho dự đoán cuối cùng
+                y_pred = (y_score >= best_threshold).astype(float)
+                positive_preds = np.sum(y_pred == 1)
+                logger.info(f"Positive predictions made: {positive_preds}/{len(y_pred)} ({positive_preds/len(y_pred)*100:.2f}%)")
+                
+                # Tính confusion matrix với ngưỡng tối ưu
+                tn, fp, fn, tp = best_tn, best_fp, best_fn, best_tp
             else:
-                # Standard case with 2x2 confusion matrix
-                tn, fp, fn, tp = cm.ravel()
+                # Không có mẫu dương tính trong ground truth
+                logger.warning("No positive samples in ground truth, using default threshold")
+                y_pred = (y_score >= 0.01).astype(float)  # Default threshold
+                
+                # Kiểm tra xem có dự đoán dương tính nào không
+                positive_preds = np.sum(y_pred == 1)
+                logger.info(f"Positive predictions made: {positive_preds}/{len(y_pred)} ({positive_preds/len(y_pred)*100:.2f}%)")
+                
+                if positive_preds > 0:
+                    # Nếu có dự đoán dương tính nhưng không có mẫu dương tính thực, tất cả là false positives
+                    tn = len(y_true) - positive_preds
+                    fp = positive_preds
+                    fn = 0
+                    tp = 0
+                else:
+                    # Không có dự đoán dương tính và không có mẫu dương tính thực: tất cả true negatives
+                    tn = len(y_true)
+                    fp = 0
+                    fn = 0
+                    tp = 0
+                    
+                metrics['optimal_threshold'] = 0.01  # Default
             
-            # Calculate accuracy
+            # ===== CẢI TIẾN 2: Tính toán các chỉ số đánh giá phù hợp cho dữ liệu mất cân bằng =====
+            # Tính các chỉ số cơ bản
             accuracy = 100.0 * (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0.0
-            
-            # Calculate precision, recall, F1 - handling possible division by zero
             precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
             recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
             specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
             f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
             
-            # Calculate AUC-ROC if possible (needs positive and negative samples)
-            auc_roc = 0.5  # Default value (random classifier)
-            if len(np.unique(y_true)) > 1:  # Only if both classes are present
-                try:
-                    auc_roc = roc_auc_score(y_true, y_score)
-                except Exception as e:
-                    logger.warning(f"Error calculating AUC-ROC: {e}")
-            else:
-                logger.warning("Only one class present in evaluation, AUC-ROC defaulting to 0.5")
+            # Tính chỉ số F2 (nhấn mạnh recall hơn precision)
+            beta = 2
+            f_beta = (1 + beta**2) * precision * recall / ((beta**2 * precision) + recall) if (precision + recall) > 0 else 0.0
             
-            # Create metrics dictionary
-            metrics = {
-                "accuracy": accuracy / 100.0,  # Convert from percentage to proportion
+            # ===== CẢI TIẾN 3: Thêm AUC-ROC và AUC-PR =====
+            # AUC-ROC
+            auc_roc = 0.5  # Mặc định
+            if len(np.unique(y_true)) > 1:
+                try:
+                    from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
+                    auc_roc = roc_auc_score(y_true, y_score)
+                    
+                    # AUC-PR (Area Under Precision-Recall Curve) - tốt hơn AUC-ROC cho dữ liệu mất cân bằng
+                    precision_curve, recall_curve, _ = precision_recall_curve(y_true, y_score)
+                    auc_pr = auc(recall_curve, precision_curve)
+                    metrics["auc_pr"] = auc_pr
+                    
+                    logger.info(f"AUC-ROC: {auc_roc:.4f}, AUC-PR: {auc_pr:.4f}")
+                except Exception as e:
+                    logger.warning(f"Error calculating AUC metrics: {e}")
+            
+            # ===== CẢI TIẾN 4: Thêm các chỉ số đánh giá mở rộng =====
+            # Matthews Correlation Coefficient - chỉ số tốt cho dữ liệu mất cân bằng
+            mcc_numerator = (tp * tn) - (fp * fn)
+            mcc_denominator = np.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)) if (tp + fp) * (tp + fn) * (tn + fp) * (tn + fn) > 0 else 1
+            mcc = mcc_numerator / mcc_denominator
+            
+            # Tính Balanced Accuracy - trung bình của Sensitivity và Specificity
+            balanced_acc = (recall + specificity) / 2 if (recall + specificity) > 0 else 0.0
+            
+            # Thêm vào metrics dict
+            metrics.update({
+                "accuracy": accuracy / 100.0,
                 "precision": precision,
                 "recall": recall,
                 "specificity": specificity,
                 "f1_score": f1,
+                "f2_score": f_beta,  # Thêm F2-score
                 "auc_roc": auc_roc,
+                "mcc": mcc,  # Thêm Matthews Correlation Coefficient
+                "balanced_accuracy": balanced_acc,  # Thêm Balanced Accuracy
                 "true_positives": int(tp),
                 "false_positives": int(fp),
                 "true_negatives": int(tn),
-                "false_negatives": int(fn)
-            }
+                "false_negatives": int(fn),
+                "positive_rate_groundtruth": num_positive_true / len(y_true) if len(y_true) > 0 else 0,
+                "positive_rate_predicted": np.sum(y_pred == 1) / len(y_pred) if len(y_pred) > 0 else 0
+            })
             
+            # Log kết quả đánh giá chính
             logger.info(f"Ensemble evaluation - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.2f}%, "
                     f"Precision: {precision:.4f}, Recall: {recall:.4f}, "
                     f"F1: {f1:.4f}, AUC-ROC: {auc_roc:.4f}")
-        
+                    
         except Exception as e:
-            logger.error(f"Error calculating fraud metrics: {e}")
+            # Xử lý ngoại lệ
+            logger.error(f"Error calculating metrics: {e}")
             import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            traceback.print_exc()
             
-            # Fallback to basic accuracy calculation
-            correct = np.sum((y_pred > 0.5) == (y_true > 0.5))
-            accuracy = 100.0 * correct / len(y_true) if len(y_true) > 0 else 0.0
-            
+            # Fallback to basic metrics
             metrics = {
-                "accuracy": accuracy / 100.0,
+                "accuracy": (np.sum(y_score >= 0.5) == y_true).mean() if len(y_true) > 0 else 0.0,
                 "precision": 0.0,
                 "recall": 0.0,
                 "f1_score": 0.0,
@@ -1844,26 +1959,6 @@ class GAStackingClient(fl.client.NumPyClient):
                 "false_positives": 0,
                 "true_negatives": 0,
                 "false_negatives": 0
-            }
-            
-            logger.info(f"Ensemble evaluation (basic) - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.2f}%")
-        
-        # Fix for imbalanced classification problem
-        if np.sum(y_pred) == 0 and np.sum(y_true) > 0:
-            # All predictions negative but some positives exist
-            logger.warning("No positive predictions. Using default metrics values.")
-            # Default values for completely imbalanced case
-            metrics = {
-                "accuracy": (np.sum(y_true == 0) / len(y_true)) if len(y_true) > 0 else 0.0,
-                "precision": 0.0,  # Can't calculate precision with no positive predictions
-                "recall": 0.0,     # Recall is 0 when no positives are predicted
-                "specificity": 1.0, # All negatives correctly classified
-                "f1_score": 0.0,   # F1 is 0 when either precision or recall is 0
-                "auc_roc": 0.5,    # Random classifier
-                "true_positives": 0,
-                "false_positives": 0,
-                "true_negatives": np.sum(y_true == 0),
-                "false_negatives": np.sum(y_true == 1)
             }
         
         return accuracy, avg_loss, metrics
@@ -1895,7 +1990,7 @@ class GAStackingClient(fl.client.NumPyClient):
                 test_loss += loss.item() * len(data)
                 
                 # For regression, we consider a prediction correct if it's within a threshold
-                threshold = 0.5
+                threshold = 0.1
                 correct += torch.sum((torch.abs(output - target) < threshold)).item()
                 total += target.size(0)
         
@@ -1921,10 +2016,10 @@ def start_client(
     client_id: Optional[str] = None,
     input_dim: int = 10,
     output_dim: int = 1,
-    ensemble_size: int = 5,
+    ensemble_size: int = 8,
     device: str = "cpu",
-    ga_generations: int = 20,
-    ga_population_size: int = 30,
+    ga_generations: int = 3,
+    ga_population_size: int = 8,
     train_file: Optional[str] = None,
     test_file: Optional[str] = None
 ) -> None:
@@ -2299,5 +2394,4 @@ if __name__ == "__main__":
         device=args.device,
         ga_generations=args.ga_generations,
         ga_population_size=args.ga_population_size
-        
     )

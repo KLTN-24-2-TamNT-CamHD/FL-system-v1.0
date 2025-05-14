@@ -65,6 +65,7 @@ def _fix_dimensions(x, expected_dim, model_name="unknown"):
         return torch.tensor(x_fixed, device=device, dtype=dtype)
     return x_fixed
 
+
 class LinearModel(nn.Module):
     """Simple linear model."""
     
@@ -104,7 +105,6 @@ class MLPModel(nn.Module):
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.network(x)
-
 
 # Scikit-learn compatible wrappers
 class SklearnModelWrapper(nn.Module):
@@ -663,7 +663,7 @@ class GradientBoostingWrapper(SklearnModelWrapper):
                 logger.info(f"Initialized GBM with HistGradientBoostingClassifier")
             except Exception as e:
                 logger.error(f"Error initializing GBM model: {e}")
-           
+
     def get_parameters(self) -> Dict[str, Any]:
         """Get model parameters as dictionary."""
         return {
@@ -675,7 +675,6 @@ class GradientBoostingWrapper(SklearnModelWrapper):
             "input_dim": self.input_dim,
             "output_dim": self.output_dim
         }
-
 
 def create_model_from_config(config: Dict[str, Any], input_dim: int = 10, output_dim: int = 1, device: str = "cpu") -> nn.Module:
     """
@@ -1005,7 +1004,6 @@ def get_ensemble_state_dict(
     }
     
     return ensemble_state
-
 
 def load_ensemble_from_state_dict(
     ensemble_state: Dict[str, Any],

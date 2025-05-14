@@ -1,0 +1,224 @@
+(venv) cam@cam:~/v2-flw/backend/v2_fl$ python client.py \
+>   --ensemble-size 8 \
+>   --ga-generations 2 \
+>   --ga-population-size 6 \
+>   --contract-address 0x47e7A7FAb1aEf8994b9b767E8743239D606a749A \
+>   --wallet-address 0x73E50a11335222a8D47b4085D20CD745ea81A5Ad \
+>   --train-file ./data/client-1_train.txt \
+>   --test-file ./data/client-1_test.txt \
+>   --client-id client-1
+2025-05-14 11:35:29,801 - federated.ipfs - INFO - Connected to IPFS node version: 0.34.1
+2025-05-14 11:35:29,801 - FL-Client-Ensemble - INFO - Initialized IPFS connector: http://127.0.0.1:5001/api/v0
+Using Ganache account: 0x1D5102A04086332530dbBf906F6D7290EE9302e6
+Contract loaded at address: 0x47e7A7FAb1aEf8994b9b767E8743239D606a749A
+2025-05-14 11:35:29,863 - FL-Client-Ensemble - INFO - Initialized blockchain connector: http://192.168.1.146:7545
+2025-05-14 11:35:29,864 - FL-Client-Ensemble - INFO - Using contract at: 0x47e7A7FAb1aEf8994b9b767E8743239D606a749A
+2025-05-14 11:35:29,864 - FL-Client-Ensemble - WARNING - Derived dataset files not found: client-1_train.txt, client-1_test.txt
+2025-05-14 11:35:29,864 - FL-Client-Ensemble - INFO - Found dataset files in data directory
+2025-05-14 11:35:29,864 - FL-Client-Ensemble - INFO - Using dataset files: data/client-1_train.txt and data/client-1_test.txt
+2025-05-14 11:35:29,981 - FL-Client-Ensemble - INFO - Detected Credit Card Fraud dataset (Kaggle format)
+2025-05-14 11:35:29,989 - FL-Client-Ensemble - INFO - Dataset features: 31 total, 0 categorical, 31 numerical
+2025-05-14 11:35:29,994 - FL-Client-Ensemble - INFO - Dataset loaded - Input dim: 31, Output dim: 1
+2025-05-14 11:35:29,994 - FL-Client-Ensemble - INFO - Train samples: 15710, Test samples: 3000
+2025-05-14 11:35:29,995 - FL-Client-Ensemble - INFO - Positive class ratio: 4.76%
+2025-05-14 11:35:30,154 - BaseModels - INFO - Initialized xgb with HistGradientBoostingClassifier
+2025-05-14 11:35:30,159 - BaseModels - INFO - Initialized lgbm with HistGradientBoostingClassifier
+2025-05-14 11:35:30,162 - BaseModels - INFO - Initialized catboost with HistGradientBoostingClassifier
+2025-05-14 11:35:30,163 - FL-Client-Ensemble - INFO - Initialized client-1 with 8 base models
+2025-05-14 11:35:30,163 - FL-Client-Ensemble - INFO - IPFS node: http://127.0.0.1:5001/api/v0
+2025-05-14 11:35:30,179 - FL-Client-Ensemble - INFO - Client 0x73E50a11335222a8D47b4085D20CD745ea81A5Ad is authorized on the blockchain ✅
+2025-05-14 11:35:30,193 - flwr - DEBUG - Opened insecure gRPC connection (no certificates were passed)
+2025-05-14 11:35:30,198 - flwr - DEBUG - ChannelConnectivity.IDLE
+2025-05-14 11:35:30,200 - flwr - DEBUG - ChannelConnectivity.READY
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1747222530.202214   39272 fork_posix.cc:75] Other threads are currently calling into gRPC, skipping fork() handlers
+INFO :      
+2025-05-14 11:35:34,043 - flwr - INFO - 
+INFO :      Received: train message ccd3fcaa-539c-4fb3-ade6-1d8156cce289
+2025-05-14 11:35:34,043 - flwr - INFO - Received: train message ccd3fcaa-539c-4fb3-ade6-1d8156cce289
+WARNING :   Deprecation Warning: The `client_fn` function must return an instance of `Client`, but an instance of `NumpyClient` was returned. Please use `NumPyClient.to_client()` method to convert it to `Client`.
+2025-05-14 11:35:34,044 - flwr - WARNING - Deprecation Warning: The `client_fn` function must return an instance of `Client`, but an instance of `NumpyClient` was returned. Please use `NumPyClient.to_client()` method to convert it to `Client`.
+2025-05-14 11:35:34,078 - federated.ipfs - INFO - Retrieved file from IPFS with hash: QmPeyLZnaWthVosxN1VgktxyF4f3hUkMccAiSNPP4ty8RQ
+2025-05-14 11:35:34,079 - federated.ipfs - INFO - Retrieved and parsed JSON data from IPFS hash: QmPeyLZnaWthVosxN1VgktxyF4f3hUkMccAiSNPP4ty8RQ
+2025-05-14 11:35:34,079 - FL-Client-Ensemble - INFO - Found 8 model configurations in ensemble state
+2025-05-14 11:35:34,080 - BaseModels - INFO - LinearRegressionWrapper parameters set: actual_input_dim=31, declared_input_dim=31, output_dim=1
+2025-05-14 11:35:34,082 - BaseModels - INFO - LinearRegressionWrapper parameters set: actual_input_dim=31, declared_input_dim=31, output_dim=1
+2025-05-14 11:35:34,092 - BaseModels - INFO - Initialized GBM with HistGradientBoostingClassifier
+2025-05-14 11:35:34,098 - BaseModels - INFO - Initialized GBM with HistGradientBoostingClassifier
+2025-05-14 11:35:34,111 - BaseModels - INFO - Initialized GBM with HistGradientBoostingClassifier
+2025-05-14 11:35:34,133 - FL-Client-Ensemble - INFO - Ensemble model loaded from IPFS: QmPeyLZnaWthVosxN1VgktxyF4f3hUkMccAiSNPP4ty8RQ
+2025-05-14 11:35:34,133 - FL-Client-Ensemble - INFO - Model loaded from IPFS: QmPeyLZnaWthVosxN1VgktxyF4f3hUkMccAiSNPP4ty8RQ
+2025-05-14 11:35:34,133 - FL-Client-Ensemble - INFO - Identified 7 base models and 1 meta-learners
+2025-05-14 11:35:34,133 - FL-Client-Ensemble - WARNING - Model knn has all-zero coefficients before training, initializing
+2025-05-14 11:35:34,153 - FL-Client-Ensemble - INFO - Reduced validation set to 500 samples for faster GA training
+2025-05-14 11:35:34,153 - FL-Client-Ensemble - INFO - Created validation split: 500 validation, 12568 training samples
+2025-05-14 11:35:34,153 - FL-Client-Ensemble - INFO - Performing GA-Stacking optimization
+2025-05-14 11:35:34,155 - FL-Client-Ensemble - INFO - Skipping training for lr (already trained)
+2025-05-14 11:35:34,155 - FL-Client-Ensemble - INFO - Skipping training for svc (already trained)
+2025-05-14 11:35:34,155 - FL-Client-Ensemble - INFO - Skipping training for rf (already trained)
+2025-05-14 11:35:34,155 - FL-Client-Ensemble - INFO - Skipping training for lr (already trained)
+2025-05-14 11:35:34,155 - FL-Client-Ensemble - INFO - Base model 4/7 (knn) trained
+2025-05-14 11:35:34,155 - FL-Client-Ensemble - INFO - Skipping training for catboost (already trained)
+2025-05-14 11:35:34,155 - FL-Client-Ensemble - INFO - Skipping training for lgbm (already trained)
+2025-05-14 11:35:34,155 - FL-Client-Ensemble - INFO - Skipping training for xgb (already trained)
+2025-05-14 11:35:34,204 - FL-Client-Ensemble - INFO - Generated predictions from lr for meta-learner training
+2025-05-14 11:35:34,217 - FL-Client-Ensemble - INFO - Generated predictions from svc for meta-learner training
+2025-05-14 11:35:34,218 - FL-Client-Ensemble - INFO - Generated predictions from rf for meta-learner training
+2025-05-14 11:35:34,226 - FL-Client-Ensemble - INFO - Generated predictions from knn for meta-learner training
+2025-05-14 11:35:34,228 - FL-Client-Ensemble - INFO - Generated predictions from catboost for meta-learner training
+2025-05-14 11:35:34,229 - FL-Client-Ensemble - INFO - Generated predictions from lgbm for meta-learner training
+2025-05-14 11:35:34,230 - FL-Client-Ensemble - INFO - Generated predictions from xgb for meta-learner training
+2025-05-14 11:35:38,872 - FL-Client-Ensemble - INFO - Meta-learner meta_lr trained on base model predictions with input dim 7
+2025-05-14 11:35:38,872 - FL-Client-Ensemble - INFO - Starting GA-Stacking optimization
+
+2025-05-14 11:38:36,735 - GA-Stacking - INFO - Generation 1/2, Best Fitness: 0.1528, Avg Fitness: 0.1436
+
+2025-05-14 11:41:19,607 - GA-Stacking - INFO - Generation 2/2, Best Fitness: 0.1528, Avg Fitness: 0.1514
+2025-05-14 11:41:19,607 - GA-Stacking - INFO - Optimization complete. Best weights: lr: 0.0610, svc: 0.1615, rf: 0.1182, knn: 0.2605, catboost: 0.1383, lgbm: 0.0346, xgb: 0.0534, meta_lr: 0.1725
+2025-05-14 11:41:19,608 - FL-Client-Ensemble - INFO - GA-Stacking complete. Ensemble weights: lr: 0.0610, svc: 0.1615, rf: 0.1182, knn: 0.2605, catboost: 0.1383, lgbm: 0.0346, xgb: 0.0534, meta_lr: 0.1725
+2025-05-14 11:41:19,810 - FL-Client-Ensemble - INFO - GA-Stacking metrics: Accuracy=0.0260, Diversity=0.7770, Final Score=3939
+2025-05-14 11:41:33,281 - FL-Client-Ensemble - INFO - Positive samples in ground truth: 8/3000 (0.27%)
+2025-05-14 11:41:33,281 - FL-Client-Ensemble - INFO - Positive predictions made: 2896/3000 (96.53%)
+2025-05-14 11:41:33,285 - FL-Client-Ensemble - INFO - Ensemble evaluation - Loss: 1.0484, Accuracy: 3.53%, Precision: 0.0017, Recall: 0.6250, F1: 0.0034, AUC-ROC: 0.1133
+2025-05-14 11:41:33,297 - federated.ipfs - INFO - Added file to IPFS with hash: QmSA9YGJvdnoSvbE98CazCgu3amatwZrcbRoPkW6tAu2ES
+2025-05-14 11:41:33,298 - federated.ipfs - INFO - Added JSON data to IPFS with hash: QmSA9YGJvdnoSvbE98CazCgu3amatwZrcbRoPkW6tAu2ES
+2025-05-14 11:41:33,298 - FL-Client-Ensemble - INFO - Stored ensemble model in IPFS: QmSA9YGJvdnoSvbE98CazCgu3amatwZrcbRoPkW6tAu2ES
+INFO :      Sent reply
+2025-05-14 11:41:33,301 - flwr - INFO - Sent reply
+INFO :      
+2025-05-14 11:41:35,146 - flwr - INFO - 
+INFO :      Received: evaluate message 786197d2-d08d-46ea-af64-778f2bbf518f
+2025-05-14 11:41:35,147 - flwr - INFO - Received: evaluate message 786197d2-d08d-46ea-af64-778f2bbf518f
+WARNING :   Deprecation Warning: The `client_fn` function must return an instance of `Client`, but an instance of `NumpyClient` was returned. Please use `NumPyClient.to_client()` method to convert it to `Client`.
+2025-05-14 11:41:35,148 - flwr - WARNING - Deprecation Warning: The `client_fn` function must return an instance of `Client`, but an instance of `NumpyClient` was returned. Please use `NumPyClient.to_client()` method to convert it to `Client`.
+2025-05-14 11:41:35,184 - federated.ipfs - INFO - Retrieved file from IPFS with hash: QmReSSTc99hC17HBFQ2a2sbpcpNsd6hdtUvUgwF993aney
+2025-05-14 11:41:35,184 - federated.ipfs - INFO - Retrieved and parsed JSON data from IPFS hash: QmReSSTc99hC17HBFQ2a2sbpcpNsd6hdtUvUgwF993aney
+2025-05-14 11:41:35,186 - FL-Client-Ensemble - INFO - Identified 7 base models and 1 meta-learners
+2025-05-14 11:41:46,832 - FL-Client-Ensemble - INFO - Positive samples in ground truth: 8/3000 (0.27%)
+2025-05-14 11:41:46,832 - FL-Client-Ensemble - INFO - Positive predictions made: 2896/3000 (96.53%)
+2025-05-14 11:41:46,836 - FL-Client-Ensemble - INFO - Ensemble evaluation - Loss: 1.0484, Accuracy: 3.53%, Precision: 0.0017, Recall: 0.6250, F1: 0.0034, AUC-ROC: 0.1133
+INFO :      Sent reply
+2025-05-14 11:41:46,837 - flwr - INFO - Sent reply
+INFO :      
+2025-05-14 11:41:46,991 - flwr - INFO - 
+INFO :      Received: train message 393d891e-235f-4a33-94e0-1252c875f1bc
+2025-05-14 11:41:46,992 - flwr - INFO - Received: train message 393d891e-235f-4a33-94e0-1252c875f1bc
+WARNING :   Deprecation Warning: The `client_fn` function must return an instance of `Client`, but an instance of `NumpyClient` was returned. Please use `NumPyClient.to_client()` method to convert it to `Client`.
+2025-05-14 11:41:46,992 - flwr - WARNING - Deprecation Warning: The `client_fn` function must return an instance of `Client`, but an instance of `NumpyClient` was returned. Please use `NumPyClient.to_client()` method to convert it to `Client`.
+2025-05-14 11:41:47,017 - federated.ipfs - INFO - Retrieved file from IPFS with hash: QmWkFMt2fsvLN7YSmAYGJN4RUsebudj6j96dPYc4ewKgXU
+2025-05-14 11:41:47,018 - federated.ipfs - INFO - Retrieved and parsed JSON data from IPFS hash: QmWkFMt2fsvLN7YSmAYGJN4RUsebudj6j96dPYc4ewKgXU
+2025-05-14 11:41:47,018 - FL-Client-Ensemble - INFO - Model loaded from IPFS: QmWkFMt2fsvLN7YSmAYGJN4RUsebudj6j96dPYc4ewKgXU
+2025-05-14 11:41:47,018 - FL-Client-Ensemble - INFO - Identified 7 base models and 1 meta-learners
+2025-05-14 11:41:47,034 - FL-Client-Ensemble - INFO - Reduced validation set to 500 samples for faster GA training
+2025-05-14 11:41:47,042 - FL-Client-Ensemble - INFO - Created validation split: 500 validation, 12568 training samples
+2025-05-14 11:41:47,042 - FL-Client-Ensemble - INFO - Performing GA-Stacking optimization
+2025-05-14 11:41:47,043 - FL-Client-Ensemble - INFO - Skipping training for lr (already trained)
+2025-05-14 11:41:47,043 - FL-Client-Ensemble - INFO - Skipping training for svc (already trained)
+2025-05-14 11:41:47,043 - FL-Client-Ensemble - INFO - Skipping training for rf (already trained)
+2025-05-14 11:41:47,043 - FL-Client-Ensemble - INFO - Skipping training for lr (already trained)
+2025-05-14 11:41:47,043 - FL-Client-Ensemble - INFO - Base model 4/7 (knn) trained
+2025-05-14 11:41:47,043 - FL-Client-Ensemble - INFO - Skipping training for catboost (already trained)
+2025-05-14 11:41:47,043 - FL-Client-Ensemble - INFO - Skipping training for lgbm (already trained)
+2025-05-14 11:41:47,043 - FL-Client-Ensemble - INFO - Skipping training for xgb (already trained)
+2025-05-14 11:41:47,116 - FL-Client-Ensemble - INFO - Generated predictions from lr for meta-learner training
+2025-05-14 11:41:47,132 - FL-Client-Ensemble - INFO - Generated predictions from svc for meta-learner training
+2025-05-14 11:41:47,153 - FL-Client-Ensemble - INFO - Generated predictions from rf for meta-learner training
+2025-05-14 11:41:47,172 - FL-Client-Ensemble - INFO - Generated predictions from knn for meta-learner training
+2025-05-14 11:41:47,261 - FL-Client-Ensemble - INFO - Generated predictions from catboost for meta-learner training
+2025-05-14 11:41:47,323 - FL-Client-Ensemble - INFO - Generated predictions from lgbm for meta-learner training
+2025-05-14 11:41:47,377 - FL-Client-Ensemble - INFO - Generated predictions from xgb for meta-learner training
+2025-05-14 11:42:03,096 - FL-Client-Ensemble - INFO - Meta-learner meta_lr trained on base model predictions with input dim 7
+2025-05-14 11:42:03,097 - FL-Client-Ensemble - INFO - Starting GA-Stacking optimization
+2025-05-14 11:44:59,321 - GA-Stacking - INFO - Generation 1/2, Best Fitness: 0.1739, Avg Fitness: 0.1542
+2025-05-14 11:47:51,767 - GA-Stacking - INFO - Generation 2/2, Best Fitness: 0.1751, Avg Fitness: 0.1644
+2025-05-14 11:47:51,767 - GA-Stacking - INFO - Optimization complete. Best weights: lr: 0.1234, svc: 0.0573, rf: 0.0167, knn: 0.2843, catboost: 0.1835, lgbm: 0.1153, xgb: 0.1426, meta_lr: 0.0770
+2025-05-14 11:47:51,768 - FL-Client-Ensemble - INFO - GA-Stacking complete. Ensemble weights: lr: 0.1234, svc: 0.0573, rf: 0.0167, knn: 0.2843, catboost: 0.1835, lgbm: 0.1153, xgb: 0.1426, meta_lr: 0.0770
+2025-05-14 11:47:52,373 - FL-Client-Ensemble - INFO - GA-Stacking metrics: Accuracy=0.9600, Diversity=0.7882, Final Score=9105
+2025-05-14 11:48:06,456 - FL-Client-Ensemble - INFO - Positive samples in ground truth: 8/3000 (0.27%)
+2025-05-14 11:48:06,456 - FL-Client-Ensemble - INFO - Positive predictions made: 2896/3000 (96.53%)
+2025-05-14 11:48:06,461 - FL-Client-Ensemble - INFO - Ensemble evaluation - Loss: 0.9118, Accuracy: 3.53%, Precision: 0.0017, Recall: 0.6250, F1: 0.0034, AUC-ROC: 0.1094
+2025-05-14 11:48:06,470 - federated.ipfs - INFO - Added file to IPFS with hash: QmZXxDs5YaoLJPp9ALnd4exXnhgLKGwdzgJJXTxZsvDF1Y
+2025-05-14 11:48:06,471 - federated.ipfs - INFO - Added JSON data to IPFS with hash: QmZXxDs5YaoLJPp9ALnd4exXnhgLKGwdzgJJXTxZsvDF1Y
+2025-05-14 11:48:06,471 - FL-Client-Ensemble - INFO - Stored ensemble model in IPFS: QmZXxDs5YaoLJPp9ALnd4exXnhgLKGwdzgJJXTxZsvDF1Y
+INFO :      Sent reply
+2025-05-14 11:48:06,472 - flwr - INFO - Sent reply
+INFO :      
+2025-05-14 11:48:08,020 - flwr - INFO - 
+INFO :      Received: evaluate message 2a797043-e066-4105-8419-836b2e4ed835
+2025-05-14 11:48:08,021 - flwr - INFO - Received: evaluate message 2a797043-e066-4105-8419-836b2e4ed835
+WARNING :   Deprecation Warning: The `client_fn` function must return an instance of `Client`, but an instance of `NumpyClient` was returned. Please use `NumPyClient.to_client()` method to convert it to `Client`.
+2025-05-14 11:48:08,021 - flwr - WARNING - Deprecation Warning: The `client_fn` function must return an instance of `Client`, but an instance of `NumpyClient` was returned. Please use `NumPyClient.to_client()` method to convert it to `Client`.
+2025-05-14 11:48:08,042 - federated.ipfs - INFO - Retrieved file from IPFS with hash: QmZgU2x1YEGpQtfufnfoAfjqfX1PknDSpsghhFiDh1saLU
+2025-05-14 11:48:08,042 - federated.ipfs - INFO - Retrieved and parsed JSON data from IPFS hash: QmZgU2x1YEGpQtfufnfoAfjqfX1PknDSpsghhFiDh1saLU
+2025-05-14 11:48:08,043 - FL-Client-Ensemble - INFO - Identified 7 base models and 1 meta-learners
+2025-05-14 11:48:12,145 - FL-Client-Ensemble - INFO - Positive samples in ground truth: 8/3000 (0.27%)
+2025-05-14 11:48:12,146 - FL-Client-Ensemble - INFO - Positive predictions made: 2896/3000 (96.53%)
+2025-05-14 11:48:12,150 - FL-Client-Ensemble - INFO - Ensemble evaluation - Loss: 0.9118, Accuracy: 3.53%, Precision: 0.0017, Recall: 0.6250, F1: 0.0034, AUC-ROC: 0.1094
+INFO :      Sent reply
+2025-05-14 11:48:12,150 - flwr - INFO - Sent reply
+INFO :      
+2025-05-14 11:48:12,237 - flwr - INFO - 
+INFO :      Received: train message cd42684c-1a05-4914-a48e-152c8086f55d
+2025-05-14 11:48:12,237 - flwr - INFO - Received: train message cd42684c-1a05-4914-a48e-152c8086f55d
+WARNING :   Deprecation Warning: The `client_fn` function must return an instance of `Client`, but an instance of `NumpyClient` was returned. Please use `NumPyClient.to_client()` method to convert it to `Client`.
+2025-05-14 11:48:12,238 - flwr - WARNING - Deprecation Warning: The `client_fn` function must return an instance of `Client`, but an instance of `NumpyClient` was returned. Please use `NumPyClient.to_client()` method to convert it to `Client`.
+2025-05-14 11:48:12,259 - federated.ipfs - INFO - Retrieved file from IPFS with hash: QmSyE9AYRbXNQy5EMHGqbikiXHMnvBc6MGE56c23kTMo5z
+2025-05-14 11:48:12,261 - federated.ipfs - INFO - Retrieved and parsed JSON data from IPFS hash: QmSyE9AYRbXNQy5EMHGqbikiXHMnvBc6MGE56c23kTMo5z
+2025-05-14 11:48:12,261 - FL-Client-Ensemble - INFO - Model loaded from IPFS: QmSyE9AYRbXNQy5EMHGqbikiXHMnvBc6MGE56c23kTMo5z
+2025-05-14 11:48:12,261 - FL-Client-Ensemble - INFO - Identified 7 base models and 1 meta-learners
+2025-05-14 11:48:12,269 - FL-Client-Ensemble - INFO - Reduced validation set to 500 samples for faster GA training
+2025-05-14 11:48:12,277 - FL-Client-Ensemble - INFO - Created validation split: 500 validation, 12568 training samples
+2025-05-14 11:48:12,278 - FL-Client-Ensemble - INFO - Performing GA-Stacking optimization
+2025-05-14 11:48:12,279 - FL-Client-Ensemble - INFO - Skipping training for lr (already trained)
+2025-05-14 11:48:12,280 - FL-Client-Ensemble - INFO - Skipping training for svc (already trained)
+2025-05-14 11:48:12,280 - FL-Client-Ensemble - INFO - Skipping training for rf (already trained)
+2025-05-14 11:48:12,280 - FL-Client-Ensemble - INFO - Skipping training for lr (already trained)
+2025-05-14 11:48:12,280 - FL-Client-Ensemble - INFO - Base model 4/7 (knn) trained
+2025-05-14 11:48:12,280 - FL-Client-Ensemble - INFO - Skipping training for catboost (already trained)
+2025-05-14 11:48:12,281 - FL-Client-Ensemble - INFO - Skipping training for lgbm (already trained)
+2025-05-14 11:48:12,281 - FL-Client-Ensemble - INFO - Skipping training for xgb (already trained)
+2025-05-14 11:48:12,314 - FL-Client-Ensemble - INFO - Generated predictions from lr for meta-learner training
+2025-05-14 11:48:12,327 - FL-Client-Ensemble - INFO - Generated predictions from svc for meta-learner training
+2025-05-14 11:48:12,342 - FL-Client-Ensemble - INFO - Generated predictions from rf for meta-learner training
+2025-05-14 11:48:12,355 - FL-Client-Ensemble - INFO - Generated predictions from knn for meta-learner training
+2025-05-14 11:48:12,438 - FL-Client-Ensemble - INFO - Generated predictions from catboost for meta-learner training
+2025-05-14 11:48:12,503 - FL-Client-Ensemble - INFO - Generated predictions from lgbm for meta-learner training
+2025-05-14 11:48:12,562 - FL-Client-Ensemble - INFO - Generated predictions from xgb for meta-learner training
+2025-05-14 11:48:27,994 - FL-Client-Ensemble - INFO - Meta-learner meta_lr trained on base model predictions with input dim 7
+2025-05-14 11:48:27,994 - FL-Client-Ensemble - INFO - Starting GA-Stacking optimization
+
+2025-05-14 11:51:11,754 - GA-Stacking - INFO - Generation 1/2, Best Fitness: 0.1726, Avg Fitness: 0.1523
+2025-05-14 11:54:00,236 - GA-Stacking - INFO - Generation 2/2, Best Fitness: 0.1726, Avg Fitness: 0.1615
+2025-05-14 11:54:00,236 - GA-Stacking - INFO - Optimization complete. Best weights: lr: 0.0719, svc: 0.0462, rf: 0.0057, knn: 0.2019, catboost: 0.0918, lgbm: 0.1111, xgb: 0.2255, meta_lr: 0.2459
+2025-05-14 11:54:00,236 - FL-Client-Ensemble - INFO - GA-Stacking complete. Ensemble weights: lr: 0.0719, svc: 0.0462, rf: 0.0057, knn: 0.2019, catboost: 0.0918, lgbm: 0.1111, xgb: 0.2255, meta_lr: 0.2459
+2025-05-14 11:54:00,825 - FL-Client-Ensemble - INFO - GA-Stacking metrics: Accuracy=0.0000, Diversity=0.7816, Final Score=4357
+2025-05-14 11:54:14,857 - FL-Client-Ensemble - INFO - Positive samples in ground truth: 8/3000 (0.27%)
+2025-05-14 11:54:14,857 - FL-Client-Ensemble - INFO - Positive predictions made: 3000/3000 (100.00%)
+2025-05-14 11:54:14,863 - FL-Client-Ensemble - INFO - Ensemble evaluation - Loss: 0.9987, Accuracy: 0.27%, Precision: 0.0027, Recall: 1.0000, F1: 0.0053, AUC-ROC: 0.1059
+2025-05-14 11:54:14,881 - federated.ipfs - INFO - Added file to IPFS with hash: QmThaWb1mf5jMn9qpaNyrBbVr9mz2P68qycrMb35BAi7vg
+2025-05-14 11:54:14,881 - federated.ipfs - INFO - Added JSON data to IPFS with hash: QmThaWb1mf5jMn9qpaNyrBbVr9mz2P68qycrMb35BAi7vg
+2025-05-14 11:54:14,882 - FL-Client-Ensemble - INFO - Stored ensemble model in IPFS: QmThaWb1mf5jMn9qpaNyrBbVr9mz2P68qycrMb35BAi7vg
+INFO :      Sent reply
+2025-05-14 11:54:14,883 - flwr - INFO - Sent reply
+INFO :      
+2025-05-14 11:54:16,676 - flwr - INFO - 
+INFO :      Received: evaluate message c71add72-8cab-4cb6-85e8-09b3055329fb
+2025-05-14 11:54:16,677 - flwr - INFO - Received: evaluate message c71add72-8cab-4cb6-85e8-09b3055329fb
+WARNING :   Deprecation Warning: The `client_fn` function must return an instance of `Client`, but an instance of `NumpyClient` was returned. Please use `NumPyClient.to_client()` method to convert it to `Client`.
+2025-05-14 11:54:16,677 - flwr - WARNING - Deprecation Warning: The `client_fn` function must return an instance of `Client`, but an instance of `NumpyClient` was returned. Please use `NumPyClient.to_client()` method to convert it to `Client`.
+2025-05-14 11:54:16,703 - federated.ipfs - INFO - Retrieved file from IPFS with hash: Qmcpf12b5qbS3rG4NC3aKLgx5YpxbGrWZzU6jTVbSrUy53
+2025-05-14 11:54:16,705 - federated.ipfs - INFO - Retrieved and parsed JSON data from IPFS hash: Qmcpf12b5qbS3rG4NC3aKLgx5YpxbGrWZzU6jTVbSrUy53
+2025-05-14 11:54:16,706 - FL-Client-Ensemble - INFO - Identified 7 base models and 1 meta-learners
+2025-05-14 11:54:28,922 - FL-Client-Ensemble - INFO - Positive samples in ground truth: 8/3000 (0.27%)
+2025-05-14 11:54:28,924 - FL-Client-Ensemble - INFO - Positive predictions made: 3000/3000 (100.00%)
+2025-05-14 11:54:28,928 - FL-Client-Ensemble - INFO - Ensemble evaluation - Loss: 0.9987, Accuracy: 0.27%, Precision: 0.0027, Recall: 1.0000, F1: 0.0053, AUC-ROC: 0.1059
+INFO :      Sent reply
+2025-05-14 11:54:28,929 - flwr - INFO - Sent reply
+INFO :      
+2025-05-14 11:54:28,969 - flwr - INFO - 
+INFO :      Received: reconnect message b1ec8a28-a291-482b-872d-a88e3b280cbf
+2025-05-14 11:54:28,971 - flwr - INFO - Received: reconnect message b1ec8a28-a291-482b-872d-a88e3b280cbf
+2025-05-14 11:54:28,977 - flwr - DEBUG - gRPC channel closed
+INFO :      Disconnect and shut down
+2025-05-14 11:54:28,978 - flwr - INFO - Disconnect and shut down
+Segmentation fault (core dumped)

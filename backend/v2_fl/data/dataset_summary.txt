@@ -7,28 +7,28 @@ Balance method: Varying SMOTE (different for each client)
 Client Summaries:
 
 client-1:
-  - Amount range: $0.00 to $9.99
-  - Train fraud ratio: 4.7613%
-  - Test fraud ratio: 0.2667%
-  - Train samples: 15710
-  - Test samples: 3000
-  - Train fraud cases: 748
-  - Test fraud cases: 8
+  - Amount range: $0.00 to $89.99
+  - Train fraud ratio: 9.0906%
+  - Test fraud ratio: 0.2400%
+  - Train samples: 32924
+  - Test samples: 5000
+  - Train fraud cases: 2993
+  - Test fraud cases: 12
 
 client-2:
-  - Amount range: $10.00 to $50.00
-  - Train fraud ratio: 9.0904%
-  - Test fraud ratio: 0.0667%
-  - Train samples: 16490
-  - Test samples: 3000
-  - Train fraud cases: 1499
-  - Test fraud cases: 2
+  - Amount range: $1.30 to $186.10
+  - Train fraud ratio: 13.0431%
+  - Test fraud ratio: 0.1998%
+  - Train samples: 34455
+  - Test samples: 5004
+  - Train fraud cases: 4494
+  - Test fraud cases: 10
 
 client-3:
-  - Amount range: $50.01 to $25691.16
-  - Train fraud ratio: 19.9979%
-  - Test fraud ratio: 0.2000%
-  - Train samples: 18712
-  - Test samples: 3000
-  - Train fraud cases: 3742
-  - Test fraud cases: 6
+  - Amount range: $4.50 to $25691.16
+  - Train fraud ratio: 23.0751%
+  - Test fraud ratio: 0.1999%
+  - Train samples: 38938
+  - Test samples: 5002
+  - Train fraud cases: 8985
+  - Test fraud cases: 10

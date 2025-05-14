@@ -1,0 +1,149 @@
+[
+  {
+    "round": 1,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,knn,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.21890906064010965,
+        0.13987331708183795,
+        0.09185991887539015,
+        0.24735908486899086,
+        0.06766677695253752,
+        0.027145380396908874,
+        0.1568881284780879,
+        0.05029833270613719
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 81.65306122448979,
+      "ga_stacking_score_range": 63,
+      "ga_stacking_reward_participants": 49
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T08:35:58.533024+00:00"
+  },
+  {
+    "round": 1,
+    "eval_loss": 0.08596504852175713,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 99.83333333333334,
+      "loss": 0.08596504807472229,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 99.83333333333334
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T08:36:12.195591+00:00"
+  },
+  {
+    "round": 2,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,knn,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.044680941931648475,
+        0.10968035287318487,
+        0.2084676318823882,
+        0.2532077434024891,
+        0.1439403743587254,
+        0.04396962334218875,
+        0.03297332720530669,
+        0.16308000500406852
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 86.3076923076923,
+      "ga_stacking_score_range": 55,
+      "ga_stacking_reward_participants": 39
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T08:47:37.688455+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": 0.20375302992761135,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 99.83333333333334,
+      "loss": 0.2037530250499646,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 99.83333333333334
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T08:47:46.579253+00:00"
+  },
+  {
+    "round": 3,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,knn,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.07602805571392363,
+        0.25925586535192385,
+        0.07184202607524662,
+        0.24329455687188087,
+        0.1402877035389855,
+        0.11091637471896539,
+        0.0,
+        0.09837541772907407
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 86.07894736842105,
+      "ga_stacking_score_range": 63,
+      "ga_stacking_reward_participants": 38
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T08:59:06.153939+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 0.21538554318249226,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 99.83333333333334,
+      "loss": 0.21538553629318874,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 99.83333333333334
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T08:59:17.982973+00:00"
+  }
+]

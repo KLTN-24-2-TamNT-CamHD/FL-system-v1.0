@@ -1,0 +1,149 @@
+[
+  {
+    "round": 1,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,knn,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.06214384391189839,
+        0.2547928301270851,
+        0.04415997360488969,
+        0.14977605799813903,
+        0.17004494712050608,
+        0.2649996850994335,
+        0.010024876302341014,
+        0.04405778583570742
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 80.84313725490196,
+      "ga_stacking_score_range": 63,
+      "ga_stacking_reward_participants": 51
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T09:19:46.151657+00:00"
+  },
+  {
+    "round": 1,
+    "eval_loss": 0.07240620953962207,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 99.44999999999999,
+      "loss": 0.07240621293211977,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 99.44999999999999
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T09:19:58.535740+00:00"
+  },
+  {
+    "round": 2,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,knn,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.2747502686044645,
+        0.18990060477331458,
+        0.14414969528277286,
+        0.15836671217051385,
+        0.07969608797913472,
+        0.004055941875955575,
+        0.14013290122101432,
+        0.0089477880928294
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 85.04878048780488,
+      "ga_stacking_score_range": 55,
+      "ga_stacking_reward_participants": 41
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T09:30:02.022685+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": 0.04849672503769398,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 99.76666666666667,
+      "loss": 0.048496722994993136,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 99.76666666666667
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T09:30:14.720823+00:00"
+  },
+  {
+    "round": 3,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,knn,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.14100453688903786,
+        0.23666072829348317,
+        0.2981754359914693,
+        0.12212877132925717,
+        0.014018693307108743,
+        0.13841033480166479,
+        0.01323115643283453,
+        0.03637034295514452
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 84.55,
+      "ga_stacking_score_range": 63,
+      "ga_stacking_reward_participants": 40
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T09:40:10.510349+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 0.08672861056402326,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 99.76666666666667,
+      "loss": 0.08672861127058665,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 99.76666666666667
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T09:40:22.017410+00:00"
+  }
+]

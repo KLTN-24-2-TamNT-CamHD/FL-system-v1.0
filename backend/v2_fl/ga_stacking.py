@@ -10,6 +10,8 @@ import torch
 import torch.nn as nn
 from sklearn.model_selection import KFold
 import logging
+from sklearn.metrics import roc_auc_score
+
 
 # Configure logging
 logging.basicConfig(
@@ -113,7 +115,12 @@ class GAStacking:
             base_weights = base_weights / np.sum(base_weights)
         
         if len(meta_weights) > 0:
-            meta_weights = meta_weights / np.sum(meta_weights)
+            sum_weights = np.sum(meta_weights)
+            if sum_weights > 0:
+                meta_weights = meta_weights / sum_weights
+            else:
+                # Nếu tổng là 0, gán trọng số bằng nhau
+                meta_weights = np.ones_like(meta_weights) / len(meta_weights)
         
         # Use eval context
         with torch.no_grad():
@@ -218,7 +225,7 @@ class GAStacking:
                     mse = torch.mean((final_output - targets) ** 2).item()
                     total_loss += mse * targets.size(0)
                     # Count correct predictions (within threshold)
-                    threshold = 0.5
+                    threshold = 0.1
                     correct += torch.sum((torch.abs(final_output - targets) < threshold)).item()
                 # For classification
                 else:
@@ -232,15 +239,64 @@ class GAStacking:
         if total == 0:
             return 0.0
             
-        accuracy = correct / total
-        avg_loss = total_loss / total if total > 0 else float('inf')
-        
-        # Include diversity in fitness
+        # Thu thập tất cả dự đoán và mục tiêu
+        all_preds = []
+        all_targets = []
+
+        # Thu thập lại dự đoán từ val_data
+        with torch.no_grad():
+            for data, targets in val_data:
+                data, targets = data.to(self.device), targets.to(self.device)
+                
+                # Tạo dự đoán từ mô hình ensemble với trọng số hiện tại
+                individual_ensemble = EnsembleModel(
+                    models=self.base_models,
+                    weights=weights,
+                    model_names=self.model_names,
+                    device=self.device
+                )
+                
+                predictions = individual_ensemble(data)
+                
+                all_preds.extend(predictions.cpu().numpy().flatten())
+                all_targets.extend(targets.cpu().numpy().flatten())
+
+        # Tính đa dạng trọng số
         weight_diversity = np.std(weights)
-        
-        # Combined fitness (higher is better)
-        combined_fitness = accuracy + (weight_diversity * 0.2)
-        
+
+        if len(np.unique(all_targets)) > 1:
+            try:
+                # Đầu tiên tính precision và recall
+                y_pred_bin = (np.array(all_preds) >= 0.01).astype(float)
+                tp = np.sum((y_pred_bin == 1) & (np.array(all_targets) == 1))
+                fp = np.sum((y_pred_bin == 1) & (np.array(all_targets) == 0))
+                fn = np.sum((y_pred_bin == 0) & (np.array(all_targets) == 1))
+                
+                precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+                recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+                
+                # Tính F2-score (nhấn mạnh recall hơn precision)
+                beta = 2
+                f2_score = (1 + beta**2) * precision * recall / ((beta**2 * precision) + recall) if (precision + recall) > 0 else 0
+                
+                # Kết hợp F2-score với đa dạng trọng số và AUC
+                auc = roc_auc_score(all_targets, all_preds)
+                combined_fitness = (0.6 * f2_score) + (0.3 * auc) + (0.1 * weight_diversity)
+                
+                # Cộng thêm điểm nếu phát hiện được ít nhất một gian lận
+                if tp > 0:
+                    combined_fitness += 0.05
+                    
+                logger.debug(f"F2: {f2_score:.4f}, AUC: {auc:.4f}, Diversity: {weight_diversity:.4f}")
+            except Exception as e:
+                logger.warning(f"Error calculating custom fitness: {e}")
+                combined_fitness = weight_diversity * 0.5  # Fallback
+        else:
+            # Nếu chỉ có một lớp, sử dụng accuracy làm backup
+            accuracy = correct / total if total > 0 else 0
+            combined_fitness = accuracy + (weight_diversity * 0.5)
+            logger.debug(f"Only one class in validation batch, using accuracy: {accuracy:.4f}")
+
         return combined_fitness
     
     def select_parents(

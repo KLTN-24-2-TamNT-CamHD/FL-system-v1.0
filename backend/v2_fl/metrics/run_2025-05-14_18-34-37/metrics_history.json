@@ -1,0 +1,149 @@
+[
+  {
+    "round": 1,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,knn,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.15843313258130032,
+        0.22223192731820718,
+        0.04954947391534501,
+        0.13259176956005364,
+        0.13678675920099592,
+        0.059525814899989656,
+        0.1782734309937296,
+        0.06260769153037862
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 77.54385964912281,
+      "ga_stacking_score_range": 63,
+      "ga_stacking_reward_participants": 57
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T11:41:33.808953+00:00"
+  },
+  {
+    "round": 1,
+    "eval_loss": 0.831988513469696,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 51.733333333333334,
+      "loss": 0.831988530476888,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 51.733333333333334
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T11:41:46.871985+00:00"
+  },
+  {
+    "round": 2,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,knn,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.1593065583110824,
+        0.13870765434038043,
+        0.17520827472241435,
+        0.1807646499541909,
+        0.10197167615780202,
+        0.0252371043683408,
+        0.090813309635513,
+        0.12799077251027616
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 80.85106382978724,
+      "ga_stacking_score_range": 55,
+      "ga_stacking_reward_participants": 47
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T11:48:06.575026+00:00"
+  },
+  {
+    "round": 2,
+    "eval_loss": 0.7693116068840027,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 51.733333333333334,
+      "loss": 0.7693116001288096,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 51.733333333333334
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T11:48:12.152400+00:00"
+  },
+  {
+    "round": 3,
+    "metrics": {
+      "num_ensembles": 2,
+      "num_models": 8,
+      "model_names": "catboost,knn,lgbm,lr,meta_lr,rf,svc,xgb",
+      "ensemble_weights": [
+        0.12507468648314765,
+        0.20597832422416346,
+        0.07746483128762525,
+        0.135961005013662,
+        0.1531538152959274,
+        0.006369777827670048,
+        0.07696067403106426,
+        0.21903688583674
+      ],
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "ga_stacking_avg_score": 80.8409090909091,
+      "ga_stacking_score_range": 63,
+      "ga_stacking_reward_participants": 44
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T11:54:15.420220+00:00"
+  },
+  {
+    "round": 3,
+    "eval_loss": 0.7870689928531647,
+    "eval_metrics": {
+      "ensemble_size": 8.0,
+      "accuracy": 50.1,
+      "loss": 0.7870689833164215,
+      "num_clients": 2,
+      "total_clients": 2,
+      "authorized_clients": 2,
+      "unauthorized_clients": 0,
+      "true_positives": 0,
+      "false_positives": 0,
+      "true_negatives": 0,
+      "false_negatives": 0,
+      "global_precision": 0.0,
+      "global_recall": 0.0,
+      "global_f1": 0.0,
+      "avg_accuracy": 50.1
+    },
+    "num_clients": 2,
+    "timestamp": "2025-05-14T11:54:28.948717+00:00"
+  }
+]
