@@ -143,7 +143,7 @@ contract Federation {
         RoundRewardPool storage pool = roundRewardPools[round];
         require(pool.totalAmount > 0, "Empty pool");
         require(!pool.isFinalized, "Already finalized");
-
+        
         pool.isFinalized = true;
         
         emit RewardPoolFinalized(round, pool.totalAmount);

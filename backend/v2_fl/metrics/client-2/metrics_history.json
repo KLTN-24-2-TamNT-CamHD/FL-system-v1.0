@@ -1,20 +1,28 @@
 [
   {
     "round": 1,
-    "eval_loss": 0.7250288213185555,
-    "accuracy": 0.0,
-    "precision": 0.0,
-    "recall": 0.0,
-    "f1_score": 0.0,
-    "specificity": 0.0,
-    "auc_roc": 0.147136563876652,
-    "true_positives": 0,
-    "false_positives": 0,
-    "true_negatives": 0,
-    "false_negatives": 0,
-    "eval_samples": 5004,
-    "ipfs_hash": "QmSFYzRrFUeSSPPLHaoM5sDRhPqF2rZqDvgjLjpaN7CGFn",
+    "fit_loss": 0.7898069308530227,
+    "accuracy": 88.02957633892886,
+    "ensemble_weights": [
+      0.05018661543726921,
+      0.16628971695899963,
+      0.18505829572677612,
+      0.012865988537669182,
+      0.13772088289260864,
+      0.18321287631988525,
+      0.089692622423172,
+      0.1749730110168457
+    ],
+    "ipfs_hash": "QmVZnz4G8ZCQPsovoHjktKVDo9cWKNX5A8e6bjWmizAjUZ",
     "wallet_address": "0x73CDd275BeB83388A2eB8A6b10C5E1Db7b1f1e0b",
-    "timestamp": "2025-05-14T12:50:10.859566+00:00"
+    "timestamp": "2025-05-14T14:15:05.379125+00:00",
+    "ga_stacking_metrics": {
+      "ensemble_accuracy": 0.794,
+      "diversity_score": 0.0010476190973782824,
+      "generalization_score": 0.9525065963060686,
+      "convergence_rate": 0.5,
+      "avg_base_model_score": 0.9988571428571429,
+      "final_score": 6581
+    }
   }
 ]

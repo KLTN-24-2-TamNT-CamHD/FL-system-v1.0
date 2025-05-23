@@ -28,6 +28,9 @@ class GAStackingRewardSystem:
         self.blockchain = blockchain_connector
         self.logger = logging.getLogger('GAStackingRewardSystem')
         
+        # Add contribution tracking cache
+        self.contribution_registry = {}
+        
         # Load GA-specific configuration
         try:
             with open(config_path, 'r') as f:
@@ -49,6 +52,12 @@ class GAStackingRewardSystem:
                     "increment_per_round": 0.02,  # Increase each round
                     "accuracy_bonus_threshold": 0.9,  # Bonus for >90% accuracy
                     "bonus_multiplier": 1.5  # 50% bonus for high accuracy
+                },
+                "score_scaling": {
+                    "min_score": 0,
+                    "max_score": 10000,
+                    "display_min": 0,
+                    "display_max": 100
                 }
             }
             self.logger.info("Using default GA-Stacking reward configuration")
@@ -86,6 +95,7 @@ class GAStackingRewardSystem:
     def record_client_contribution(self, client_address, ipfs_hash, metrics, round_number):
         """
         Record a client's GA-Stacking contribution on the blockchain.
+        Includes duplicate prevention and clear score tracking.
         
         Args:
             client_address: Client's Ethereum address
@@ -97,6 +107,13 @@ class GAStackingRewardSystem:
             tuple: (success, recorded_score, transaction_hash)
         """
         try:
+            # Check if client already has a higher contribution in this round
+            existing_contributions = self.get_round_contributions(round_number)
+            client_previous_scores = [
+                c['score'] for c in existing_contributions 
+                if c['client_address'].lower() == client_address.lower()
+            ]
+            
             # Ensure we have a valid score
             if 'final_score' not in metrics:
                 # Calculate score from individual metrics
@@ -119,14 +136,23 @@ class GAStackingRewardSystem:
                 # Convert to integer score (0-10000)
                 metrics['final_score'] = int(min(1.0, weighted_score) * 10000)
             
-            score = metrics['final_score']
+            raw_score = metrics['final_score']
+            normalized_score = self.normalize_score(raw_score)
+            
+            # Skip if client already has a higher score in this round
+            if client_previous_scores and max(client_previous_scores) >= raw_score:
+                self.logger.info(
+                    f"Client {client_address} already has a higher score ({max(client_previous_scores)}) "
+                    f"in round {round_number}. Skipping new contribution with score {raw_score}."
+                )
+                return True, max(client_previous_scores), None
             
             # Record on blockchain
             tx_hash = self.blockchain.contract.functions.recordContribution(
                 client_address,
                 round_number,
                 ipfs_hash,
-                score
+                normalized_score  # Use normalized score for blockchain
             ).transact({
                 'from': self.blockchain.account.address
             })
@@ -135,8 +161,11 @@ class GAStackingRewardSystem:
             tx_receipt = self.blockchain.web3.eth.wait_for_transaction_receipt(tx_hash)
             
             if tx_receipt.status == 1:
-                self.logger.info(f"Recorded GA-Stacking contribution from {client_address} with score {score}")
-                return True, score, tx_hash.hex()
+                self.logger.info(
+                    f"Recorded GA-Stacking contribution from {client_address} "
+                    f"with raw score {raw_score}, normalized to {normalized_score}"
+                )
+                return True, normalized_score, tx_hash.hex()
             else:
                 self.logger.error(f"Failed to record GA-Stacking contribution for {client_address}")
                 return False, 0, tx_hash.hex()
@@ -145,10 +174,34 @@ class GAStackingRewardSystem:
             self.logger.error(f"Error recording GA-Stacking contribution: {e}")
             return False, 0, None
     
+    def normalize_score(self, score):
+        """
+        Normalize score to ensure consistency between recording and allocation.
+        Converts from raw scores (0-10000) to display scores (0-100).
+        
+        Args:
+            score: Raw score (0-10000)
+            
+        Returns:
+            normalized_score: Normalized score (0-100)
+        """
+        # If score is in the 0-10000 range, convert to 0-100 scale
+        if score > 100:
+            normalized = int(score / 100)
+            self.logger.info(f"Normalized score from {score} to {normalized}")
+            return normalized
+        return score
+    
     def finalize_round_and_allocate_rewards(self, round_number):
         """
         Finalize a round and allocate rewards to contributors.
-        This checks if the pool is already finalized before attempting to finalize it.
+        This version consolidates rewards per client to reduce multiple small payments.
+        
+        Args:
+            round_number: Federated learning round number
+            
+        Returns:
+            tuple: (success, allocated_amount)
         """
         try:
             # Check if pool is already finalized
@@ -167,22 +220,161 @@ class GAStackingRewardSystem:
             else:
                 self.logger.info(f"Pool for round {round_number} is already finalized")
             
-            # Now allocate rewards
-            self.logger.info(f"Allocating rewards for round {round_number}")
-            tx_hash = self.blockchain.allocate_rewards_for_round(round_number)
+            # Get all contributions for this round
+            contributions = self.get_round_contributions(round_number)
             
-            if tx_hash:
+            # Group contributions by client address and keep only the highest score
+            client_contributions = {}
+            for contribution in contributions:
+                client_address = contribution['client_address']
+                score = contribution['score']
+                
+                if client_address not in client_contributions or score > client_contributions[client_address]['score']:
+                    client_contributions[client_address] = contribution
+            
+            # Calculate total pool amount
+            total_pool = float(pool_info['total_eth'])
+            
+            # Get sum of normalized scores for proportional allocation
+            total_score = sum(c['score'] for c in client_contributions.values())
+            
+            # Create consolidated reward allocation dictionary
+            reward_allocations = {}
+            for client_address, contribution in client_contributions.items():
+                score = contribution['score']
+                
+                # Use proportional allocation based on score share
+                if total_score > 0:
+                    reward_factor = score / total_score
+                else:
+                    reward_factor = 0
+                    
+                reward_amount = total_pool * reward_factor
+                
+                # Add to allocation dict
+                reward_allocations[client_address] = {
+                    'amount': reward_amount,
+                    'score': score
+                }
+            
+            # Check if we have a consolidated allocation method
+            if hasattr(self.blockchain, 'allocate_consolidated_rewards') and callable(getattr(self.blockchain, 'allocate_consolidated_rewards')):
+                # Use consolidated allocation method
+                try:
+                    # Create simpler dict for blockchain
+                    allocation_dict = {addr: data['amount'] for addr, data in reward_allocations.items()}
+                    tx_hash = self.blockchain.allocate_consolidated_rewards(round_number, allocation_dict)
+                    
+                    self.logger.info(f"Allocated rewards in a single transaction, tx: {tx_hash}")
+                    
+                    # Get updated pool info
+                    updated_pool_info = self.get_reward_pool_info(round_number)
+                    allocated_eth = updated_pool_info['allocated_eth']
+                except Exception as e:
+                    self.logger.error(f"Error in consolidated reward allocation: {e}")
+                    return False, 0
+            else:
+                # Fall back to standard allocation method
+                tx_hash = self.blockchain.allocate_rewards_for_round(round_number)
+                
+                if not tx_hash:
+                    self.logger.error(f"Failed to allocate rewards for round {round_number}")
+                    return False, 0
+                    
+                # Get updated pool info
                 updated_pool_info = self.get_reward_pool_info(round_number)
                 allocated_eth = updated_pool_info['allocated_eth']
-                
-                self.logger.info(f"Successfully allocated {allocated_eth} ETH rewards for round {round_number}")
-                return True, allocated_eth
-            else:
-                self.logger.error(f"Failed to allocate rewards for round {round_number}")
-                return False, 0
+            
+            # Log a clear consolidated summary
+            self.log_reward_summary(round_number, reward_allocations)
+            
+            self.logger.info(f"Successfully allocated {allocated_eth} ETH rewards for round {round_number}")
+            return True, allocated_eth
+            
         except Exception as e:
             self.logger.error(f"Error in reward allocation: {e}")
             return False, 0
+    
+    def log_reward_summary(self, round_number):
+        """Log a clear summary of rewards allocated for a round."""
+        try:
+            # Get pool info
+            pool_info = self.get_reward_pool_info(round_number)
+            
+            # Get consolidated rewards by client
+            client_rewards = self.get_consolidated_rewards_summary(round_number)
+            
+            # Log summary header
+            self.logger.info(f"=== Round {round_number} Reward Allocation Summary ===")
+            self.logger.info(f"Total pool: {pool_info['total_eth']} ETH")
+            self.logger.info(f"Allocated: {pool_info['allocated_eth']} ETH")
+            self.logger.info(f"Remaining: {pool_info['remaining_eth']} ETH")
+            
+            # Log client summaries
+            self.logger.info(f"=== Client Reward Summary ===")
+            for address, data in client_rewards.items():
+                self.logger.info(
+                    f"Client {address}: {data['total_rewards']} ETH from {data['contributions']} "
+                    f"contributions with avg score {data['avg_score']:.2f}"
+                )
+        except Exception as e:
+            self.logger.error(f"Error generating reward summary: {e}")
+            
+    def get_consolidated_rewards_summary(self, round_number):
+        """
+        Get a consolidated summary of rewards by client.
+        
+        Args:
+            round_number: The federated learning round number
+            
+        Returns:
+            dict: Dictionary with client addresses as keys and reward summaries as values
+        """
+        try:
+            # Get all contributions for this round
+            contributions = self.get_round_contributions(round_number)
+            
+            # Group by client address
+            client_rewards = {}
+            for contribution in contributions:
+                address = contribution['client_address']
+                if address not in client_rewards:
+                    client_rewards[address] = {
+                        'total_score': 0,
+                        'contributions': 0,
+                        'scores': []
+                    }
+                
+                client_rewards[address]['contributions'] += 1
+                client_rewards[address]['total_score'] += contribution['score']
+                client_rewards[address]['scores'].append(contribution['score'])
+            
+            # Calculate average scores and get actual rewards
+            for address, data in client_rewards.items():
+                data['avg_score'] = data['total_score'] / data['contributions'] if data['contributions'] > 0 else 0
+                
+                # Try to get actual rewards received
+                try:
+                    # This might need to be adapted based on how your contract tracks rewards
+                    reward_info = self.blockchain.get_client_contribution_details(address)
+                    data['rewards_earned'] = float(reward_info.get('rewards_earned', 0))
+                except Exception as e:
+                    self.logger.warning(f"Could not retrieve reward amount for {address}: {e}")
+                    data['rewards_earned'] = 0
+                    
+                # Calculate percentage of total pool
+                pool_info = self.get_reward_pool_info(round_number)
+                total_allocated = float(pool_info['allocated_eth'])
+                if total_allocated > 0:
+                    data['percentage'] = (data['rewards_earned'] / total_allocated) * 100
+                else:
+                    data['percentage'] = 0
+            
+            return client_rewards
+            
+        except Exception as e:
+            self.logger.error(f"Error generating consolidated rewards summary: {e}")
+            return {}
     
     def get_reward_pool_info(self, round_number):
         """
@@ -354,38 +546,3 @@ class GAStackingRewardSystem:
         except Exception as e:
             self.logger.error(f"Error funding reward pool for round {round_number}: {e}")
             return False, None
-        
-    def log_client_rewards(self, round_number, results):
-        """
-        Log detailed information about rewards allocated to clients.
-        
-        Args:
-            round_number: The federated learning round number
-            results: The allocation results from the smart contract
-        """
-        try:
-            # Get all client contributions for this round
-            contributions = self.get_round_contributions(round_number)
-            
-            # Get the reward pool info
-            pool_info = self.get_reward_pool_info(round_number)
-            
-            # Log allocation summary
-            self.logger.info(f"=== Round {round_number} Reward Allocation Summary ===")
-            self.logger.info(f"Total pool: {pool_info['total_eth']} ETH")
-            self.logger.info(f"Allocated: {pool_info['allocated_eth']} ETH")
-            self.logger.info(f"Remaining: {pool_info['remaining_eth']} ETH")
-            
-            # Log individual client rewards
-            for contribution in contributions:
-                client_address = contribution['client_address']
-                score = contribution['score']
-                
-                # Calculate this client's reward based on contribution proportion
-                total_score = sum(c['score'] for c in contributions)
-                client_proportion = score / total_score if total_score > 0 else 0
-                client_reward = client_proportion * float(pool_info['allocated_eth'])
-                
-                self.logger.info(f"Client {client_address} received {client_reward:.6f} ETH in round {round_number} with score: {score}")
-        except Exception as e:
-            self.logger.error(f"Error logging client rewards: {e}")

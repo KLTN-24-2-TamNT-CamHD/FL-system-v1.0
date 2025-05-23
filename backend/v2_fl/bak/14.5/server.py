@@ -181,37 +181,250 @@ class EnhancedFedAvgWithGA(fl.server.strategy.FedAvg):
         """Generate a version string based on round number."""
         return f"{self.version_prefix}.{round_num}"
 
-    def initialize_parameters(self, client_manager):
-        # Simplify this to just return empty parameters instead of model configs
-        # The clients will initialize their own models
-        return ndarrays_to_parameters([np.array([])])
-    
-    def configure_fit(self, server_round, parameters, client_manager):
-        # Remove complex model parameter passing
-        # Just send round info and basic config
+    def initialize_parameters(
+        self, client_manager: fl.server.client_manager.ClientManager
+    ) -> Optional[Parameters]:
+        input_dim = 31
+        output_dim = 1
+        num_base_models = 7
+        initial_ensemble_config = []
+
+        # 1. Logistic Regression
+        initial_ensemble_config.append({
+            "estimator": "lr",
+            "model_type": "lr",
+            "input_dim": input_dim,
+            "output_dim": output_dim,
+            "coef": [[random.uniform(-0.01, 0.01) for _ in range(input_dim)]],
+            "intercept": [-3.0],
+            "penalty": "l2",
+            "C": 1.0,
+            "class_weight": None,
+            "solver": "liblinear",
+            "max_iter": 1000,
+            "random_state": 42
+        })
+
+        # 2. SVC
+        initial_ensemble_config.append({
+            "estimator": "svc",
+            "model_type": "svc",
+            "input_dim": input_dim,
+            "output_dim": output_dim,
+            "kernel": "rbf",
+            "C": 1.0,
+            "gamma": "scale",
+            "probability": True,
+            "class_weight": None,
+            "random_state": 42,
+            "dual_coef": [[0.01, -0.01]],
+            "support_vectors": [
+                [random.uniform(-0.1, 0.1) for _ in range(input_dim)],
+                [random.uniform(-0.1, 0.1) for _ in range(input_dim)]
+            ],
+            "intercept": [0.0]
+        })
+
+        # 3. Random Forest
+        initial_ensemble_config.append({
+            "estimator": "rf",
+            "model_type": "rf",
+            "input_dim": input_dim,
+            "output_dim": output_dim,
+            "n_estimators": 100,
+            "criterion": "gini",
+            "max_depth": None,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "max_features": "auto",
+            "bootstrap": True,
+            "class_weight": None,
+            "random_state": 42,
+            "feature_importances": [1.0/input_dim] * input_dim
+        })
+
+        # 4. KNN
+        initial_ensemble_config.append({
+            "estimator": "knn",
+            "model_type": "knn",
+            "input_dim": input_dim,
+            "output_dim": output_dim,
+            "n_neighbors": 5,
+            "weights": "uniform",
+            "algorithm": "auto",
+            "leaf_size": 30,
+            "p": 2,
+            "metric": "minkowski"
+        })
+
+        # 5. CatBoost
+        initial_ensemble_config.append({
+            "estimator": "catboost",
+            "model_type": "catboost",
+            "input_dim": input_dim,
+            "output_dim": output_dim,
+            "iterations": 100,
+            "depth": 6,
+            "learning_rate": 0.1,
+            "loss_function": "Logloss",
+            "verbose": False,
+            "random_state": 42
+        })
+
+        # 6. LightGBM
+        initial_ensemble_config.append({
+            "estimator": "lgbm",
+            "model_type": "lgbm",
+            "input_dim": input_dim,
+            "output_dim": output_dim,
+            "n_estimators": 100,
+            "max_depth": -1,
+            "learning_rate": 0.1,
+            "subsample": 1.0,
+            "colsample_bytree": 1.0,
+            "objective": "binary",
+            "boosting_type": "gbdt",
+            "random_state": 42
+        })
+
+        # 7. XGBoost
+        initial_ensemble_config.append({
+            "estimator": "xgb",
+            "model_type": "xgb",
+            "input_dim": input_dim,
+            "output_dim": output_dim,
+            "n_estimators": 100,
+            "max_depth": 6,
+            "learning_rate": 0.1,
+            "subsample": 1.0,
+            "colsample_bytree": 1.0,
+            "objective": "binary:logistic",
+            "use_label_encoder": False,
+            "eval_metric": "logloss",
+            "random_state": 42
+        })
+
+        # Optionally add meta-learner for stacking
+        initial_ensemble_config.append({
+            "estimator": "meta_lr",
+            "model_type": "meta_lr",
+            "input_dim": num_base_models,  # Number of base models
+            "output_dim": output_dim,
+            "penalty": "l2",
+            "C": 1.0,
+            "solver": "liblinear",
+            "max_iter": 1000,
+            "random_state": 42,
+            "coef": [[1/num_base_models]*num_base_models],
+            "intercept": [0.0]
+        })
+
+        model_names = ["lr", "svc", "rf", "knn", "catboost", "lgbm", "xgb", "meta_lr"]
+        weights = [1/num_base_models]*num_base_models + [0.0]
+
+        ensemble_state = {
+            "model_parameters": initial_ensemble_config,
+            "weights": weights,
+            "model_names": model_names
+        }
+
+        ensemble_bytes = json.dumps(ensemble_state).encode('utf-8')
+        parameters = ndarrays_to_parameters([np.frombuffer(ensemble_bytes, dtype=np.uint8)])
+
+        logger.info(f"Initialized server with ensemble: {', '.join(model_names)}")
+        return parameters
+
+    def configure_fit(
+        self, server_round: int, parameters: Parameters, client_manager: fl.server.client_manager.ClientManager
+    ) -> List[Tuple[ClientProxy, FitIns]]:
+        """Configure the next round of training for fraud detection."""
+
+        # Reset round contributions
+        self.current_round_contributions = {}
+
+        # Get parameters as ndarrays
+        params_ndarrays = parameters_to_ndarrays(parameters)
+
+        # Check if we have an ensemble or a regular model
+        is_ensemble = len(params_ndarrays) == 1 and params_ndarrays[0].dtype == np.uint8
+
+        # Store in IPFS
+        if is_ensemble:
+            # Handle ensemble model
+            try:
+                # Deserialize ensemble
+                ensemble_bytes = params_ndarrays[0].tobytes()
+                ensemble_state = json.loads(ensemble_bytes.decode('utf-8'))
+
+                # Create metadata with ensemble state
+                version_data = self.get_version_strategy(server_round)
+                model_metadata = {
+                    "ensemble_state": ensemble_state,
+                    "info": {
+                        "round": server_round,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "version": version_data["version"],
+                        "version_data": version_data,
+                        "is_ensemble": True,
+                        "task_type": "fraud_detection",  # Specify task type
+                        "num_models": len(ensemble_state["model_names"]),
+                        "model_names": ensemble_state["model_names"]
+                    }
+                }
+
+                # Store in IPFS
+                ipfs_hash = self.ipfs.add_json(model_metadata)
+                logger.info(f"Stored fraud detection ensemble in IPFS: {ipfs_hash}")
+
+            except Exception as e:
+                logger.error(f"Failed to process ensemble model: {e}")
+                # Fall back to storing raw parameters
+                ipfs_hash = self._store_raw_parameters_in_ipfs(params_ndarrays, server_round)
+        else:
+            # Handle regular model
+            ipfs_hash = self._store_raw_parameters_in_ipfs(params_ndarrays, server_round)
+
+        # Register in blockchain if available
+        if self.blockchain:
+            try:
+                # Use register_or_update_model instead of register_model
+                tx_hash = self.blockchain.register_or_update_model(
+                    ipfs_hash=ipfs_hash,
+                    round_num=server_round,
+                    version=self.get_version(server_round),
+                    participating_clients=0  # Will be updated after fit
+                )
+                logger.info(f"Registered model in blockchain, tx: {tx_hash}")
+            except Exception as e:
+                logger.error(f"Failed to register model in blockchain: {e}")
+
+        # Configure fit instructions for clients with fraud detection specific parameters
         config = {
+            "ipfs_hash": ipfs_hash, 
             "server_round": server_round,
-            "ga_stacking": True,
+            "ga_stacking": True,  # Enable GA-Stacking on clients
             "local_epochs": 5,
             "validation_split": 0.2,
-            "task_type": "fraud_detection",
-            "pos_weight": 99.0,
-            "use_f1_score": True,
-            "detection_threshold": 0.3
+            "is_ensemble": is_ensemble,
+            "task_type": "fraud_detection",  # Specify task type
+            "pos_weight": 99.0,  # Class weight for fraud (adjust based on actual distribution)
+            "use_f1_score": True,  # Use F1 score for GA-Stacking fitness
+            "detection_threshold": 0.3  # Lower threshold for fraud detection (fraud is rare)
         }
-        
-        # Use empty parameters to reduce payload size - clients initialize their own models
+
+        # Use empty parameters to reduce payload size - model is in IPFS
         empty_parameters = ndarrays_to_parameters([np.array([])])
         fit_ins = FitIns(empty_parameters, config)
-        
+
         # Sample clients for this round
         clients = client_manager.sample(
             num_clients=self.min_fit_clients, 
             min_num_clients=self.min_available_clients
         )
-        
+
+        # Return client/config pairs
         return [(client, fit_ins) for client in clients]
-        
+    
     def _store_raw_parameters_in_ipfs(self, params_ndarrays: List[np.ndarray], server_round: int) -> str:
         """Store raw parameters in IPFS."""
         # Create state dict from weights
